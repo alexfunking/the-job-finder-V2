@@ -1,0 +1,39 @@
+{
+  "apiVersion": "1",
+  "jobs": [
+    {
+      "id": "9a6153da-639d-413e-b9bf-68ebf5f8c269",
+      "title": "Senior Backend Engineer",
+      "department": "Engineering",
+      "team": "Engineering",
+      "employmentType": "FullTime",
+      "location": "TLV",
+      "secondaryLocations": [],
+      "publishedAt": "2025-02-04T08:47:42.681+00:00",
+      "isListed": true,
+      "isRemote": null,
+      "workplaceType": null,
+      "jobUrl": "https://jobs.ashbyhq.com/lemonade/9a6153da-639d-413e-b9bf-68ebf5f8c269",
+      "applyUrl": "https://jobs.ashbyhq.com/lemonade/9a6153da-639d-413e-b9bf-68ebf5f8c269/application",
+      "descriptionHtml": "<p style=\"min-height:1.5em\">We’re looking for a senior-level backend engineer to join our growing Engineering team in TLV.</p><p style=\"min-height:1.5em\">This role will require you to bring features to the finish line while collaborating closely with other developers, as well as with the Product, QA, Data, and Machine Learning  teams—all with the goal of delivering a seamless, joyful experience for our customers.</p><h2><strong>In this role you’ll:</strong></h2><ul style=\"min-height:1.5em\"><li><p style=\"min-height:1.5em\">Help build our products using microservices written in Typescript (using NestJS).</p>",
+      "descriptionPlain": "We’re looking for a senior-level backend engineer to join our growing Engineering team in TLV.\n\nThis role will require you to bring features to the finish line while collaborating closely with other developers, as well as with the Product, QA, Data, and Machine Learning  teams—all with the goal of delivering a seamless, joyful experience for our customers.\n\nWe believe three things matter for every"
+    },
+    {
+      "id": "486bead9-04c4-4bb3-81b6-17fabfc5f52a",
+      "title": "Associate General Counsel, Securities & Corporate Legal",
+      "department": "Legal",
+      "team": "Legal",
+      "employmentType": "FullTime",
+      "location": "NYC",
+      "secondaryLocations": [],
+      "publishedAt": "2026-09-17T20:53:29.724+00:00",
+      "isListed": true,
+      "isRemote": null,
+      "workplaceType": null,
+      "jobUrl": "https://jobs.ashbyhq.com/lemonade/486bead9-04c4-4bb3-81b6-17fabfc5f52a",
+      "applyUrl": "https://jobs.ashbyhq.com/lemonade/486bead9-04c4-4bb3-81b6-17fabfc5f52a/application",
+      "descriptionHtml": "<p style=\"min-height:1.5em\">We're looking for a senior corporate lawyer to help Lemonade navigate the legal complexities of being a public, high-growth company at the intersection of insurance and AI. Reporting into our CLO, this role sits at the center of Lemonade's Legal team, partnering directly with executive leadership and the Board on everything from capital markets and M&amp;A to corporate governance and commercial strategy.</p><p style=\"min-height:1.5em\">We believe three things matter for every role at Lemonade: <em>drive</em> to push through challenges, <em>efficiency</em> that keeps standards high while moving fast, and <em>adaptability</em> that lets you pivot with data and AI insights. These aren't buzzwords, they're how we actually work.</p><h2>In this role you'll</h2><ul style=\"min-height:1.5em\"><li><p style=\"min-height:1.5em\">Lead legal support for capital markets activities, including equity offerings, debt issuances, and capital management initiatives</p>",
+      "descriptionPlain": "We're looking for a senior corporate lawyer to help Lemonade navigate the legal complexities of being a public, high-growth company at the intersection of insurance and AI. Reporting into our CLO, this role sits at the center of Lemonade's Legal team, partnering directly with executive leadership and the Board on everything from capital markets and M&A to corporate governance and commercial strate"
+    }
+  ]
+}

@@ -12,6 +12,26 @@ def test_lists_get_dashes() -> None:
     assert html_to_text(html) == "Requirements:\n\n- 3+ years of Python\n- SQL"
 
 
+def test_list_items_wrapped_in_paragraphs() -> None:
+    # Ashby (and editors pasting into Greenhouse) put a <p> inside every <li>.
+    html = '<ul>\n  <li><p style="x">Typescript</p></li>\n  <li><p>NestJS</p></li>\n</ul><p>After</p>'
+    assert html_to_text(html) == "- Typescript\n- NestJS\n\nAfter"
+
+
+def test_whitespace_between_li_and_p_is_ignored() -> None:
+    assert html_to_text("<ul><li>\n  <p>Typescript</p>\n</li></ul>") == "- Typescript"
+
+
+def test_empty_list_items_are_dropped_and_do_not_swallow_the_next_paragraph() -> None:
+    # Real case (JFrog, monday.com): a stray empty <li> at the end of a list.
+    html = "<ul><li>Python</li><li></li><li><p> </p></li></ul><p>After</p>"
+    assert html_to_text(html) == "- Python\n\nAfter"
+
+
+def test_unclosed_list_items() -> None:
+    assert html_to_text("<ul><li>Python<li>SQL<li></ul><p>After</p>") == "- Python\n- SQL\n\nAfter"
+
+
 def test_entities_and_nbsp_are_decoded() -> None:
     assert html_to_text("<p>R&amp;D&nbsp;team &lt;Tel Aviv&gt;</p>") == "R&D team <Tel Aviv>"
 
