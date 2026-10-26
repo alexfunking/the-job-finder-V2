@@ -1,0 +1,52 @@
+{
+  "jobs": [
+    {
+      "id": 4951235101,
+      "internal_job_id": 4511618101,
+      "title": " Agentic AI Engineer - Product Support",
+      "absolute_url": "https://www.catonetworks.com/careers/careers-post/4951235101?gh_jid=4951235101",
+      "company_name": "Cato Networks",
+      "first_published": "2026-08-17T04:13:58-04:00",
+      "updated_at": "2026-10-15T03:22:43-04:00",
+      "location": {
+        "name": "Tel Aviv District, Israel"
+      },
+      "offices": [
+        {
+          "id": 4009252101,
+          "name": "Israel",
+          "location": "Tel Aviv District, Israel"
+        },
+        {
+          "id": 4009378101,
+          "name": "Tel Aviv",
+          "location": "Tel Aviv District, Israel"
+        }
+      ],
+      "content": "&lt;p&gt;&lt;span data-contrast=&quot;none&quot;&gt;Cato Networks is the converged network and security cloud for the AI era.&lt;/span&gt;&lt;span data-ccp-props=&quot;{&amp;quot;134233117&amp;quot;:false,&amp;quot;134233118&amp;quot;:false,&amp;quot;201341983&amp;quot;:0,&amp;quot;335551550&amp;quot;:1,&amp;quot;335551620&amp;quot;:1,&amp;quot;335557856&amp;quot;:16777215,&amp;quot;335559685&amp;quot;:0,&amp;quot;335559737&amp;quot;:0,&amp;quot;335559738&amp;quot;:225,&amp;quot;335559739&amp;quot;:225,&amp;quot;335559740&amp;quot;:279}&quot;&gt;&amp;nbsp;&lt;/span&gt;&lt;/p&gt;&lt;p&gt;&lt;span data-contrast=&quot;none&quot;&gt;As AI reshapes cybersecurity, enterprises face a dual challenge: unlocking AI’s potential while defending against AI-driven attacks. Cato addresses both through a unified, cloud-native platform, providing the visibility and context to prioritize risks and stop threats in real time across users, applications, data, and AI agents.&lt;/span&gt;&lt;span data-ccp-props=&quot;{&amp;quot;134233117&amp;quot;:false,&amp;quot;134233118&amp;quot;:false,&amp;quot;201341983&amp;quot;:0,&amp;quot;335551550&amp;quot;:1,&amp;quot;335551620&amp;quot;:1,&amp;quot;335557856&amp;quot;:16777215,&amp;quot;335559685&amp;quot;:0,&amp;quot;335559737&amp;quot;:0,&amp;quot;335559738&amp;quot;:225,&amp;quot;335559739&amp;quot;:225,&amp;quot;335559740&amp;quot;:279}&quot;&gt;&amp;nbsp;&lt;/span&gt;&lt;/p&gt;&lt;ul&gt;\n&lt;li&gt;Partner directly with business teams to identify automation and optimization opportunities&lt;/li&gt;\n&lt;li&gt;Design and implement agent-based AI workflows to automate internal processes end-to-end&lt;/li&gt;\n&lt;li&gt;Design and build LLM-powered tools (agents, workflows, copilots) using frameworks like LangGraph / LangChain&lt;/li&gt;\n&lt;li&gt;Develop RAG pipelines, integrate multiple data sources, and build intelligent automation flows&lt;/li&gt;\n&lt;li&gt;Deep-dive into company data - validate quality, uncover gaps, and ensure AI solutions are built on solid foundations&lt;/li&gt;\n&lt;li&gt;Take solutions from idea → prototype → production&lt;/li&gt;\n&lt;li&gt;Governance, Reliability &amp;amp; Security&lt;/li&gt;\n&lt;li&gt;Ensure AI workflows comply with security, privacy, and compliance requirements&lt;/li&gt;\n&lt;li&gt;Implement guardrails, approvals, logging, and human-in-the-loop mechanisms where needed&lt;/li&gt;\n&lt;li&gt;Monitor AI performance, errors, hallucinations, and drift&lt;/li&gt;\n&lt;li&gt;Collaboration &amp;amp; Enablement:&lt;/li&gt;\n&lt;li&gt;Partner with business owners to identify automation opportunities&lt;/li&gt;\n&lt;li&gt;Translate business requirements into AI-driven solutions&lt;/li&gt;\n&lt;li&gt;Document AI flows, decision logic, and operational runbooks&lt;/li&gt;\n&lt;li&gt;Educate internal teams on AI capabilities and limitations&lt;/li&gt;\n&lt;/ul&gt;"
+    },
+    {
+      "id": 4889240101,
+      "internal_job_id": 4483088101,
+      "title": "AI Security Field CTO",
+      "absolute_url": "https://www.catonetworks.com/careers/careers-post/4889240101?gh_jid=4889240101",
+      "company_name": "Cato Networks",
+      "first_published": "2026-06-09T06:55:20-04:00",
+      "updated_at": "2026-10-22T11:07:10-04:00",
+      "location": {
+        "name": "London, England, United Kingdom; United Kingdom"
+      },
+      "offices": [
+        {
+          "id": 4009377101,
+          "name": "London",
+          "location": "London, England, United Kingdom"
+        }
+      ],
+      "content": "&lt;p&gt;&lt;span data-contrast=&quot;none&quot;&gt;Cato Networks is the converged network and security cloud for the AI era.&lt;/span&gt;&lt;span data-ccp-props=&quot;{&amp;quot;134233117&amp;quot;:false,&amp;quot;134233118&amp;quot;:false,&amp;quot;201341983&amp;quot;:0,&amp;quot;335551550&amp;quot;:1,&amp;quot;335551620&amp;quot;:1,&amp;quot;335557856&amp;quot;:16777215,&amp;quot;335559685&amp;quot;:0,&amp;quot;335559737&amp;quot;:0,&amp;quot;335559738&amp;quot;:225,&amp;quot;335559739&amp;quot;:225,&amp;quot;335559740&amp;quot;:279}&quot;&gt;&amp;nbsp;&lt;/span&gt;&lt;/p&gt;&lt;p&gt;&lt;span data-contrast=&quot;none&quot;&gt;As AI reshapes cybersecurity, enterprises face a dual challenge: unlocking AI’s potential while defending against AI-driven attacks. Cato addresses both through a unified, cloud-native platform, providing the visibility and context to prioritize risks and stop threats in real time across users, applications, data, and AI agents.&lt;/span&gt;&lt;span data-ccp-props=&quot;{&amp;quot;134233117&amp;quot;:false,&amp;quot;134233118&amp;quot;:false,&amp;quot;201341983&amp;quot;:0,&amp;quot;335551550&amp;quot;:1,&amp;quot;335551620&amp;quot;:1,&amp;quot;335557856&amp;quot;:16777215,&amp;quot;335559685&amp;quot;:0,&amp;quot;335559737&amp;quot;:0,&amp;quot;335559738&amp;quot;:225,&amp;quot;335559739&amp;quot;:225,&amp;quot;335559740&amp;quot;:279}&quot;&gt;&amp;nbsp;&lt;/span&gt;&lt;/p&gt;&lt;ul&gt;\n&lt;li&gt;Work closely with our customers, partners, Sales, R&amp;amp;D, Marketing, Ops, UI/UX, Documentation, Training, and Customer Success teams to deliver best-in-class AI security product in the market.&amp;nbsp;&lt;/li&gt;\n&lt;/ul&gt;"
+    }
+  ],
+  "meta": {
+    "total": 2
+  }
+}
