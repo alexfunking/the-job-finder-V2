@@ -5,7 +5,10 @@ An "opportunity radar": collect postings from public sources -> extract structur
 First module of Jarvis. Plan: Obsidian vault `02_Projects/Jarvis/Jarvis - Roadmap.md`.
 
 ## Current phase
-Phase 0 — feasibility. `tools/ats_probe.py` maps companies to ATS (Greenhouse / Lever / Ashby / SmartRecruiters via public read APIs; Comeet / Workday via careers-page fingerprint).
+Phase 1 — collect jobs with full descriptions from Greenhouse and Ashby into SQLite. Design and ADRs: vault `02_Projects/Job Finder/Job Finder - Architecture.md`.
+- `src/jobfinder/` is the package: `models.Job` is the source-independent model.
+- `tools/ats_probe.py` is the Phase 0 tool that maps companies to ATS; keep it working, it is re-run when companies change.
+- Comeet is deferred (ADR-002): its careers API uses company-issued tokens with no third-party permission. Do not call it.
 
 ## Hard rules
 - Read-only public job-board APIs only. No scraping or automation of LinkedIn, Drushim, AllJobs, Indeed.
@@ -16,4 +19,4 @@ Phase 0 — feasibility. `tools/ats_probe.py` maps companies to ATS (Greenhouse 
 ## Engineering standards
 - Python >= 3.11, full type hints, `mypy --strict` clean, no placeholder comments.
 - Tests with pytest in `tests/`; network calls are never made in unit tests.
-- Commands: `pip install pytest mypy`, then `pytest` and `mypy` from the repo root.
+- Environment is managed by uv (Python pinned in `.python-version`): `uv sync`, then `uv run pytest` and `uv run mypy` from the repo root.
