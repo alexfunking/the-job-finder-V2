@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import csv
 import sys
 from datetime import date
 from pathlib import Path
@@ -18,13 +19,17 @@ from ats_probe import (  # noqa: E402
     ProbeResult,
     candidate_slugs,
     detect_fingerprints,
+    format_errors,
     is_israel_location,
     names_match,
     probe_board,
     probe_company,
     read_companies,
     rejection_reason,
+    render_result_line,
+    render_summary,
     summarize_board,
+    write_results,
 )
 
 TODAY = date(2026, 10, 26)
@@ -230,6 +235,40 @@ def test_probe_company_surfaces_board_notes_as_errors(monkeypatch: pytest.Monkey
     result = probe_company(Company("Wiz", (), None), TODAY)
     assert result.verdict == "greenhouse:wiz"
     assert result.errors == ["greenhouse:wiz: board name: HTTP 500"]
+
+
+def test_format_errors_marks_truncation() -> None:
+    assert format_errors([]) == ""
+    assert format_errors(["a", "b", "c"]) == "a | b | c"
+    assert format_errors(["a", "b", "c", "d", "e"]) == "a | b | c | (+2 more)"
+
+
+def test_render_result_line_flags_rejections_and_errors() -> None:
+    result = ProbeResult(company=Company("Wiz", (), None))
+    assert render_result_line(result) == f"{'Wiz':<28} unknown"
+    result.rejected.append((BoardHit("smartrecruiters", "wiz", 1, 0), "stale: latest posting 2017-01-01"))
+    result.errors.extend(["greenhouse:wiz: HTTP 429", "lever:wiz: HTTP 503"])
+    assert render_result_line(result) == f"{'Wiz':<28} unknown  (rejected: smartrecruiters:wiz)  (errors: 2)"
+
+
+def test_render_summary_counts_companies_with_errors() -> None:
+    clean = ProbeResult(company=Company("A", (), None), hits=[BoardHit("greenhouse", "a", 10, 4)])
+    failing = ProbeResult(company=Company("B", (), None), errors=["greenhouse:b: HTTP 429", "lever:b: HTTP 503"])
+    summary = render_summary([clean, failing])
+    assert "Israel jobs via public APIs: 4" in summary
+    assert "Companies with fetch errors (see errors column): 1" in summary
+    assert "  greenhouse: 1" in summary
+    assert "  unknown: 1" in summary
+
+
+def test_write_results_includes_truncated_errors(tmp_path: Path) -> None:
+    result = ProbeResult(company=Company("B", (), None), errors=[f"greenhouse:b{i}: HTTP 429" for i in range(5)])
+    out = tmp_path / "ats_map.csv"
+    write_results(out, [result])
+    with out.open(encoding="utf-8", newline="") as handle:
+        rows = list(csv.DictReader(handle))
+    assert rows[0]["verdict"] == "unknown"
+    assert rows[0]["errors"].endswith("| (+2 more)")
 
 
 def test_parse_date_rejects_garbage() -> None:

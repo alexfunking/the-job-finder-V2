@@ -35,6 +35,7 @@ USER_AGENT: Final = "job-finder-ats-probe/0.1 (personal job search; contact via 
 TIMEOUT_S: Final = 15.0
 MAX_WORKERS: Final = 4
 STALE_AFTER_DAYS: Final = 180
+MAX_ERRORS_IN_CSV: Final = 3
 # Caps paging on huge boards (e.g. 5000+ postings); counts for those are a lower bound.
 MAX_PAGES: Final = 10
 
@@ -465,8 +466,25 @@ def write_results(path: Path, results: Iterable[ProbeResult]) -> None:
                 best.latest_posting.isoformat() if best and best.latest_posting else "",
                 ";".join(sorted(set(result.fingerprints))),
                 " | ".join(f"{hit.ats}:{hit.slug} ({reason})" for hit, reason in result.rejected),
-                " | ".join(result.errors[:3]),
+                format_errors(result.errors),
             ])
+
+
+def format_errors(errors: Sequence[str]) -> str:
+    shown = list(errors[:MAX_ERRORS_IN_CSV])
+    hidden = len(errors) - len(shown)
+    if hidden:
+        shown.append(f"(+{hidden} more)")
+    return " | ".join(shown)
+
+
+def render_result_line(result: ProbeResult) -> str:
+    line = f"{result.company.name:<28} {result.verdict}"
+    if result.rejected:
+        line += f"  (rejected: {', '.join(f'{h.ats}:{h.slug}' for h, _ in result.rejected)})"
+    if result.errors:
+        line += f"  (errors: {len(result.errors)})"
+    return line
 
 
 def render_summary(results: Sequence[ProbeResult]) -> str:
@@ -476,10 +494,12 @@ def render_summary(results: Sequence[ProbeResult]) -> str:
         by_verdict[key] = by_verdict.get(key, 0) + 1
     israel_total = sum(max((h.israel_jobs for h in r.hits), default=0) for r in results)
     rejected_total = sum(len(r.rejected) for r in results)
+    with_errors = sum(1 for r in results if r.errors)
     lines = [
         f"Companies probed: {len(results)}",
         f"Israel jobs via public APIs: {israel_total}",
         f"Boards rejected (name mismatch / stale): {rejected_total}",
+        f"Companies with fetch errors (see errors column): {with_errors}",
     ]
     lines.extend(f"  {verdict}: {count}" for verdict, count in sorted(by_verdict.items()))
     return "\n".join(lines)
@@ -501,8 +521,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         results = list(pool.map(probe, companies))
 
     for result in results:
-        rejected = f"  (rejected: {', '.join(f'{h.ats}:{h.slug}' for h, _ in result.rejected)})" if result.rejected else ""
-        print(f"{result.company.name:<28} {result.verdict}{rejected}")
+        print(render_result_line(result))
     args.out.parent.mkdir(parents=True, exist_ok=True)
     write_results(args.out, results)
     print()
