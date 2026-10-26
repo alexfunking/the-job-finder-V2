@@ -4,6 +4,8 @@ import sys
 from datetime import date
 from pathlib import Path
 
+import pytest
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
 
 import ats_probe  # noqa: E402
@@ -17,6 +19,7 @@ from ats_probe import (  # noqa: E402
     detect_fingerprints,
     is_israel_location,
     names_match,
+    probe_board,
     read_companies,
     rejection_reason,
     summarize_board,
@@ -112,6 +115,64 @@ def test_parsers_read_locations_and_dates() -> None:
     assert ats_probe._postings_smartrecruiters(smartrecruiters) == [Posting("Tel Aviv-Yafo Israel", date(2017, 6, 26))]
     assert ats_probe._board_name_smartrecruiters(smartrecruiters) == "Armis"
     assert ats_probe._board_name_greenhouse({"name": "Pagaya "}) == "Pagaya "
+
+
+def test_ashby_counts_secondary_locations() -> None:
+    ashby = {"jobs": [{
+        "location": "United Kingdom - London",
+        "secondaryLocations": [{"location": "Israel - Tel Aviv"}, {"address": {}}, "junk"],
+        "publishedAt": "2026-10-01T00:00:00+00:00",
+    }]}
+    postings = ats_probe._postings_ashby(ashby)
+    assert postings == [Posting("United Kingdom - London | Israel - Tel Aviv", date(2026, 10, 1))]
+    assert is_israel_location(postings[0].location)
+
+
+def test_next_offset_smartrecruiters() -> None:
+    assert ats_probe._next_offset_smartrecruiters({"offset": 0, "limit": 100, "totalFound": 250}) == 100
+    assert ats_probe._next_offset_smartrecruiters({"offset": 200, "limit": 100, "totalFound": 250}) is None
+    assert ats_probe._next_offset_smartrecruiters({"offset": 0, "limit": 100, "totalFound": 100}) is None
+    assert ats_probe._next_offset_smartrecruiters({"offset": 0, "limit": 0, "totalFound": 250}) is None
+    assert ats_probe._next_offset_smartrecruiters({"offset": "0", "limit": 100, "totalFound": 250}) is None
+    assert ats_probe._next_offset_smartrecruiters([]) is None
+
+
+def _smartrecruiters_page(offset: int, size: int, total: int, city: str, country: str = "il") -> dict[str, object]:
+    job = {"location": {"city": city, "country": country},"releasedDate": "2026-10-01T00:00:00Z", "company": {"name": "X"}}
+    return {"offset": offset, "limit": size, "totalFound": total, "content": [job] * size}
+
+
+def test_probe_board_follows_smartrecruiters_pages(monkeypatch: pytest.MonkeyPatch) -> None:
+    pages = {0: _smartrecruiters_page(0, 2, 5, "Haifa"), 2: _smartrecruiters_page(2, 2, 5, "Haifa"),
+             4: _smartrecruiters_page(4, 1, 5, "Haifa")}
+    requested: list[str] = []
+
+    def fake_fetch_json(url: str) -> object | None:
+        requested.append(url)
+        return pages[int(url.rsplit("offset=", 1)[1])]
+
+    monkeypatch.setattr(ats_probe, "_fetch_json", fake_fetch_json)
+    api = next(a for a in BOARD_APIS if a.ats == "smartrecruiters")
+    hit = probe_board(api, "x")
+    assert hit is not None
+    assert (hit.total_jobs, hit.israel_jobs, hit.board_name) == (5, 5, "X")
+    assert [u.rsplit("offset=", 1)[1] for u in requested] == ["0", "2", "4"]
+
+
+def test_probe_board_stops_at_max_pages(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(ats_probe, "MAX_PAGES", 3)
+    requested: list[str] = []
+
+    def fake_fetch_json(url: str) -> object | None:
+        requested.append(url)
+        return _smartrecruiters_page(int(url.rsplit("offset=", 1)[1]), 1, 1000, "Berlin", "de")
+
+    monkeypatch.setattr(ats_probe, "_fetch_json", fake_fetch_json)
+    api = next(a for a in BOARD_APIS if a.ats == "smartrecruiters")
+    hit = probe_board(api, "x")
+    assert hit is not None
+    assert (hit.total_jobs, hit.israel_jobs) == (3, 0)
+    assert len(requested) == 3
 
 
 def test_parse_date_rejects_garbage() -> None:

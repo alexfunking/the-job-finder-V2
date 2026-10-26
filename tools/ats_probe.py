@@ -35,6 +35,8 @@ USER_AGENT: Final = "job-finder-ats-probe/0.1 (personal job search; contact via 
 TIMEOUT_S: Final = 15.0
 MAX_WORKERS: Final = 4
 STALE_AFTER_DAYS: Final = 180
+# Caps paging on huge boards (e.g. 5000+ postings); counts for those are a lower bound.
+MAX_PAGES: Final = 10
 
 ISRAEL_KEYWORDS: Final[tuple[str, ...]] = (
     "israel", "tel aviv", "tel-aviv", "tlv", "jaffa", "yafo", "herzliya", "glilot", "haifa",
@@ -248,7 +250,14 @@ def _postings_ashby(payload: object) -> list[Posting] | None:
     for job in jobs:
         if isinstance(job, dict):
             location = job.get("location")
-            out.append(Posting(location if isinstance(location, str) else "", _parse_date(job.get("publishedAt"))))
+            parts = [location] if isinstance(location, str) else []
+            secondary = job.get("secondaryLocations")
+            if isinstance(secondary, list):
+                for entry in secondary:
+                    name = entry.get("location") if isinstance(entry, dict) else None
+                    if isinstance(name, str):
+                        parts.append(name)
+            out.append(Posting(" | ".join(parts), _parse_date(job.get("publishedAt"))))
     return out
 
 
@@ -290,14 +299,27 @@ def _board_name_smartrecruiters(payload: object) -> str | None:
     return name if isinstance(name, str) else None
 
 
+def _next_offset_smartrecruiters(payload: object) -> int | None:
+    if not isinstance(payload, dict):
+        return None
+    offset, limit, total = payload.get("offset"), payload.get("limit"), payload.get("totalFound")
+    if not (isinstance(offset, int) and isinstance(limit, int) and isinstance(total, int)) or limit <= 0:
+        return None
+    next_offset = offset + limit
+    return next_offset if next_offset < total else None
+
+
 @dataclass(frozen=True, slots=True)
 class BoardApi:
     ats: str
+    # Formatted with slug and offset; templates without {offset} return everything in one response.
     url_template: str
     parse_postings: Callable[[object], list[Posting] | None]
     parse_board_name: Callable[[object], str | None] | None = None
     # When set, the board name is read from this endpoint instead of the postings payload.
     name_url_template: str | None = None
+    # Returns the offset of the next page, or None on the last page.
+    next_offset: Callable[[object], int | None] | None = None
 
 
 BOARD_APIS: Final[tuple[BoardApi, ...]] = (
@@ -312,9 +334,10 @@ BOARD_APIS: Final[tuple[BoardApi, ...]] = (
     BoardApi("ashby", "https://api.ashbyhq.com/posting-api/job-board/{slug}", _postings_ashby),
     BoardApi(
         "smartrecruiters",
-        "https://api.smartrecruiters.com/v1/companies/{slug}/postings?limit=100",
+        "https://api.smartrecruiters.com/v1/companies/{slug}/postings?limit=100&offset={offset}",
         _postings_smartrecruiters,
         _board_name_smartrecruiters,
+        next_offset=_next_offset_smartrecruiters,
     ),
 )
 
@@ -332,7 +355,7 @@ def summarize_board(api: BoardApi, slug: str, postings: Sequence[Posting], board
 
 
 def probe_board(api: BoardApi, slug: str) -> BoardHit | None:
-    payload = _fetch_json(api.url_template.format(slug=slug))
+    payload = _fetch_json(api.url_template.format(slug=slug, offset=0))
     if payload is None:
         return None
     postings = api.parse_postings(payload)
@@ -342,6 +365,17 @@ def probe_board(api: BoardApi, slug: str) -> BoardHit | None:
     if api.parse_board_name is not None:
         name_payload = payload if api.name_url_template is None else _fetch_json(api.name_url_template.format(slug=slug))
         board_name = api.parse_board_name(name_payload)
+    pages = 1
+    while api.next_offset is not None and pages < MAX_PAGES:
+        offset = api.next_offset(payload)
+        if offset is None:
+            break
+        payload = _fetch_json(api.url_template.format(slug=slug, offset=offset))
+        page = api.parse_postings(payload) if payload is not None else None
+        if not page:
+            break
+        postings.extend(page)
+        pages += 1
     return summarize_board(api, slug, postings, board_name)
 
 
