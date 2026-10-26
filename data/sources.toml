@@ -1,0 +1,127 @@
+# Boards that `jobfinder scan` reads. Edit by hand; `tools/ats_probe.py` helps find new ones.
+# Generated once from data/ats_map.csv on 2026-10-26 (25 boards on Greenhouse and Ashby).
+
+[[board]]
+company = "Wiz"
+source = "greenhouse"
+slug = "wizinc"
+
+[[board]]
+company = "Snyk"
+source = "ashby"
+slug = "snyk"
+
+[[board]]
+company = "Cato Networks"
+source = "greenhouse"
+slug = "catonetworks"
+
+[[board]]
+company = "Island"
+source = "greenhouse"
+slug = "island"
+
+[[board]]
+company = "Axonius"
+source = "greenhouse"
+slug = "axonius"
+
+[[board]]
+company = "Orca Security"
+source = "greenhouse"
+slug = "orcasecurity"
+
+[[board]]
+company = "Transmit Security"
+source = "greenhouse"
+slug = "transmitsecurity"
+
+[[board]]
+company = "Melio"
+source = "greenhouse"
+slug = "melio"
+
+[[board]]
+company = "Tipalti"
+source = "greenhouse"
+slug = "tipaltisolutions"
+
+[[board]]
+company = "Riskified"
+source = "greenhouse"
+slug = "riskified"
+
+[[board]]
+company = "Forter"
+source = "greenhouse"
+slug = "forter"
+
+[[board]]
+company = "Payoneer"
+source = "greenhouse"
+slug = "payoneer"
+
+[[board]]
+company = "Pagaya"
+source = "greenhouse"
+slug = "pagaya"
+
+[[board]]
+company = "Lemonade"
+source = "ashby"
+slug = "lemonade"
+
+[[board]]
+company = "Similarweb"
+source = "greenhouse"
+slug = "similarweb"
+
+[[board]]
+company = "AppsFlyer"
+source = "greenhouse"
+slug = "appsflyer"
+
+[[board]]
+company = "Taboola"
+source = "greenhouse"
+slug = "taboola"
+
+[[board]]
+company = "JFrog"
+source = "greenhouse"
+slug = "jfrog"
+
+[[board]]
+company = "Via"
+source = "greenhouse"
+slug = "via"
+
+[[board]]
+company = "Playtika"
+source = "greenhouse"
+slug = "playtikaltd"
+
+[[board]]
+company = "Moon Active"
+source = "ashby"
+slug = "moonactive"
+
+[[board]]
+company = "monday.com"
+source = "ashby"
+slug = "monday.com"
+
+[[board]]
+company = "Yotpo"
+source = "greenhouse"
+slug = "yotpo"
+
+[[board]]
+company = "Torq"
+source = "greenhouse"
+slug = "torq"
+
+[[board]]
+company = "NICE"
+source = "greenhouse"
+slug = "nice"

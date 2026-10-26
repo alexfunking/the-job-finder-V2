@@ -5,6 +5,9 @@ description = "Opportunity radar: collects jobs from public ATS APIs, scores the
 requires-python = ">=3.11"
 dependencies = ["pydantic>=2.8,<3"]
 
+[project.scripts]
+jobfinder = "jobfinder.cli:main"
+
 [dependency-groups]
 dev = ["pytest>=8", "mypy>=1.10"]
 
