@@ -22,7 +22,7 @@ testpaths = ["tests"]
 strict = true
 python_version = "3.11"
 files = ["src", "tools", "tests"]
-mypy_path = "tools"
+mypy_path = ["tools", "tests"]
 plugins = ["pydantic.mypy"]
 
 [tool.pydantic-mypy]
