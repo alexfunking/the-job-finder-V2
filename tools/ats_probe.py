@@ -26,7 +26,7 @@ import urllib.error
 import urllib.request
 from collections.abc import Callable, Iterable, Sequence
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Final
@@ -92,6 +92,8 @@ class BoardHit:
     israel_jobs: int
     latest_posting: date | None = None
     board_name: str | None = None
+    # Fetch errors after the first page: the hit is kept, but its counts or name may be incomplete.
+    notes: tuple[str, ...] = ()
 
 
 @dataclass(slots=True)
@@ -186,9 +188,21 @@ def _fetch(url: str) -> tuple[int, str]:
         return exc.code, ""
 
 
+class FetchError(Exception):
+    """An HTTP status that says nothing about whether the board exists (rate limit, server error, ...)."""
+
+
+FETCH_ERRORS: Final[tuple[type[Exception], ...]] = (urllib.error.URLError, TimeoutError, OSError, FetchError)
+
+
 def _fetch_json(url: str) -> object | None:
+    """Return the parsed JSON, None when the board does not exist (404), or raise FetchError."""
     status, body = _fetch(url)
-    if status != 200 or not body:
+    if status == 404:
+        return None
+    if status != 200:
+        raise FetchError(f"HTTP {status}")
+    if not body:
         return None
     try:
         payload: object = json.loads(body)
@@ -361,22 +375,30 @@ def probe_board(api: BoardApi, slug: str) -> BoardHit | None:
     postings = api.parse_postings(payload)
     if not postings:
         return None
+    notes: list[str] = []
     board_name: str | None = None
     if api.parse_board_name is not None:
-        name_payload = payload if api.name_url_template is None else _fetch_json(api.name_url_template.format(slug=slug))
-        board_name = api.parse_board_name(name_payload)
+        try:
+            name_payload = payload if api.name_url_template is None else _fetch_json(api.name_url_template.format(slug=slug))
+            board_name = api.parse_board_name(name_payload)
+        except FETCH_ERRORS as exc:
+            notes.append(f"board name: {exc}")
     pages = 1
     while api.next_offset is not None and pages < MAX_PAGES:
         offset = api.next_offset(payload)
         if offset is None:
             break
-        payload = _fetch_json(api.url_template.format(slug=slug, offset=offset))
+        try:
+            payload = _fetch_json(api.url_template.format(slug=slug, offset=offset))
+        except FETCH_ERRORS as exc:
+            notes.append(f"page {pages + 1}: {exc}")
+            break
         page = api.parse_postings(payload) if payload is not None else None
         if not page:
             break
         postings.extend(page)
         pages += 1
-    return summarize_board(api, slug, postings, board_name)
+    return replace(summarize_board(api, slug, postings, board_name), notes=tuple(notes))
 
 
 def probe_company(company: Company, today: date) -> ProbeResult:
@@ -386,11 +408,12 @@ def probe_company(company: Company, today: date) -> ProbeResult:
         for slug in slugs:
             try:
                 hit = probe_board(api, slug)
-            except (urllib.error.URLError, TimeoutError, OSError) as exc:
+            except FETCH_ERRORS as exc:
                 result.errors.append(f"{api.ats}:{slug}: {exc}")
                 continue
             if hit is None:
                 continue
+            result.errors.extend(f"{api.ats}:{slug}: {note}" for note in hit.notes)
             reason = rejection_reason(hit, company.name, today)
             if reason is None:
                 result.hits.append(hit)
@@ -403,7 +426,7 @@ def probe_company(company: Company, today: date) -> ProbeResult:
                 result.fingerprints.extend(detect_fingerprints(html))
             else:
                 result.errors.append(f"careers_url: HTTP {status}")
-        except (urllib.error.URLError, TimeoutError, OSError) as exc:
+        except FETCH_ERRORS as exc:
             result.errors.append(f"careers_url: {exc}")
     return result
 

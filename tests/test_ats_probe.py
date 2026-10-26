@@ -13,6 +13,7 @@ from ats_probe import (  # noqa: E402
     BOARD_APIS,
     BoardHit,
     Company,
+    FetchError,
     Posting,
     ProbeResult,
     candidate_slugs,
@@ -20,6 +21,7 @@ from ats_probe import (  # noqa: E402
     is_israel_location,
     names_match,
     probe_board,
+    probe_company,
     read_companies,
     rejection_reason,
     summarize_board,
@@ -173,6 +175,61 @@ def test_probe_board_stops_at_max_pages(monkeypatch: pytest.MonkeyPatch) -> None
     assert hit is not None
     assert (hit.total_jobs, hit.israel_jobs) == (3, 0)
     assert len(requested) == 3
+
+
+def test_fetch_json_only_404_means_no_board(monkeypatch: pytest.MonkeyPatch) -> None:
+    responses = {"a": (404, ""), "b": (200, '{"jobs": []}'), "c": (200, "<html>"), "d": (429, ""), "e": (503, "")}
+    monkeypatch.setattr(ats_probe, "_fetch", lambda url: responses[url])
+    assert ats_probe._fetch_json("a") is None
+    assert ats_probe._fetch_json("b") == {"jobs": []}
+    assert ats_probe._fetch_json("c") is None
+    with pytest.raises(FetchError, match="HTTP 429"):
+        ats_probe._fetch_json("d")
+    with pytest.raises(FetchError, match="HTTP 503"):
+        ats_probe._fetch_json("e")
+
+
+def test_probe_company_records_rate_limit_instead_of_unknown(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(ats_probe, "_fetch", lambda url: (429, "") if "greenhouse" in url else (404, ""))
+    result = probe_company(Company("Wiz", (), None), TODAY)
+    assert result.verdict == "unknown"
+    assert result.errors == ["greenhouse:wiz: HTTP 429"]
+
+
+def test_probe_board_keeps_first_page_when_later_page_fails(monkeypatch: pytest.MonkeyPatch) -> None:
+    def fake_fetch_json(url: str) -> object | None:
+        offset = int(url.rsplit("offset=", 1)[1])
+        if offset == 0:
+            return _smartrecruiters_page(0, 2, 5, "Haifa")
+        raise FetchError("HTTP 503")
+
+    monkeypatch.setattr(ats_probe, "_fetch_json", fake_fetch_json)
+    api = next(a for a in BOARD_APIS if a.ats == "smartrecruiters")
+    hit = probe_board(api, "x")
+    assert hit is not None
+    assert (hit.total_jobs, hit.israel_jobs, hit.notes) == (2, 2, ("page 2: HTTP 503",))
+
+
+def test_probe_board_keeps_hit_when_board_name_fetch_fails(monkeypatch: pytest.MonkeyPatch) -> None:
+    jobs = {"jobs": [{"location": {"name": "Tel Aviv"}, "updated_at": "2026-10-20T10:00:00+00:00"}]}
+
+    def fake_fetch_json(url: str) -> object | None:
+        if url.endswith("/jobs"):
+            return jobs
+        raise FetchError("HTTP 500")
+
+    monkeypatch.setattr(ats_probe, "_fetch_json", fake_fetch_json)
+    hit = probe_board(BOARD_APIS[0], "x")
+    assert hit is not None
+    assert (hit.israel_jobs, hit.board_name, hit.notes) == (1, None, ("board name: HTTP 500",))
+
+
+def test_probe_company_surfaces_board_notes_as_errors(monkeypatch: pytest.MonkeyPatch) -> None:
+    hit = BoardHit("greenhouse", "wiz", 3, 1, TODAY, None, ("board name: HTTP 500",))
+    monkeypatch.setattr(ats_probe, "probe_board", lambda api, slug: hit if api.ats == "greenhouse" else None)
+    result = probe_company(Company("Wiz", (), None), TODAY)
+    assert result.verdict == "greenhouse:wiz"
+    assert result.errors == ["greenhouse:wiz: board name: HTTP 500"]
 
 
 def test_parse_date_rejects_garbage() -> None:
