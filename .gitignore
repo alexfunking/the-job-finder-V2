@@ -1,0 +1,15 @@
+# secrets & personal data — never commit
+.env
+*.pdf
+priorities.txt
+data/ats_map.csv
+*.db
+*.sqlite3
+
+# python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.mypy_cache/
+.pytest_cache/

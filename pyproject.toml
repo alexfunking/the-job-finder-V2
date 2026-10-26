@@ -1,0 +1,18 @@
+[project]
+name = "job-finder"
+version = "0.1.0"
+description = "Opportunity radar: collects jobs from public ATS APIs, scores them against my priorities, and sends a Telegram digest."
+requires-python = ">=3.11"
+dependencies = []
+
+[dependency-groups]
+dev = ["pytest>=8", "mypy>=1.10"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.mypy]
+strict = true
+python_version = "3.11"
+files = ["tools", "tests"]
+mypy_path = "tools"
