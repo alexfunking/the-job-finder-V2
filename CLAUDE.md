@@ -5,8 +5,9 @@ An "opportunity radar": collect postings from public sources -> extract structur
 First module of Jarvis. Plan: Obsidian vault `02_Projects/Jarvis/Jarvis - Roadmap.md`.
 
 ## Current phase
-Phase 1 — collect jobs with full descriptions from Greenhouse and Ashby into SQLite. Design and ADRs: vault `02_Projects/Job Finder/Job Finder - Architecture.md`.
-- `src/jobfinder/` is the package: `models.Job` is the source-independent model.
+Phase 1 done (collection: `jobfinder scan` → `data/jobs.db`); Phase 2 (eval set, extraction, scoring) is next. Design and ADRs: vault `02_Projects/Job Finder/Job Finder - Architecture.md`.
+- `src/jobfinder/` is the package: `models.Job` is the source-independent model; `sources/` has one module per ATS; `storage.JobStore` owns the DB; `scan.py` orchestrates; `cli.py` is the entry point.
+- Boards to scan live in `data/sources.toml` (hand-maintained, committed).
 - `tools/ats_probe.py` is the Phase 0 tool that maps companies to ATS; keep it working, it is re-run when companies change.
 - Comeet is deferred (ADR-002): its careers API uses company-issued tokens with no third-party permission. Do not call it.
 
