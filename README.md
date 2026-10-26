@@ -2,7 +2,7 @@
 
 Opportunity radar for my job search: pulls postings from public ATS job-board APIs (with full descriptions), scores them against my priorities in code, and sends a daily Telegram digest.
 
-Status: **Phase 1 done** — collection works; scoring (Phase 2) and the Telegram digest (Phase 3) are next.
+Status: **Phase 1 done** — collection works. Phase 2 (scoring) is in progress: the eval-set labeling tool is in; extraction and scoring are next, then the Telegram digest (Phase 3).
 
 ## Collect jobs
 ```bash
@@ -13,6 +13,14 @@ Reads the boards in `data/sources.toml` (Greenhouse and Ashby public APIs, one r
 Exit code: `0` every board was read, `1` some board failed, `2` config error.
 
 Acceptance check (2026-10-26): 10 consecutive scans of 25 boards, 1,450 jobs, 0 duplicate keys, every job with a description.
+
+## Label the eval set
+```bash
+uv run jobfinder label
+```
+Shows stored jobs one at a time; answer `y` (fit) or `n` (not fit) and say why, `s` to skip, `o` to open the posting, `b` to go back, `q` to quit. Every answer is saved at once to `data/labels.jsonl` (personal, not committed) with a full snapshot of the job, so a later session continues where you stopped and the eval set survives jobs closing. Stops at `--target` (default 80) fit / not-fit labels.
+
+Jobs are offered in a fixed order (`--seed`) that keeps the eval set about 70% Israel jobs, 20% Israel jobs with senior titles and 10% jobs outside Israel, so it is not dominated by the obvious rejects.
 
 ## Find a company's board
 ```bash

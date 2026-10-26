@@ -1,15 +1,20 @@
-"""Command line entry point: `jobfinder scan`."""
+"""Command line entry point: `jobfinder scan` and `jobfinder label`."""
 
 from __future__ import annotations
 
 import argparse
+import shutil
 import sys
+import webbrowser
 from collections.abc import Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 
 from jobfinder.config import ConfigError, load_boards
 from jobfinder.http import Fetcher, UrllibFetcher
+from jobfinder.labeling import Console, run_session
+from jobfinder.labels import load_labels
+from jobfinder.sampling import labeling_queue
 from jobfinder.scan import BoardOutcome, ScanReport, scan
 from jobfinder.storage import JobStore
 
@@ -71,15 +76,52 @@ def run_scan(sources_path: Path, db_path: Path, fetcher: Fetcher | None = None) 
     return EXIT_BOARD_ERRORS if report.failed else EXIT_OK
 
 
+def terminal_console() -> Console:
+    # Descriptions are UTF-8; a console that cannot show a character should print "?" rather than crash.
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(errors="replace")
+    width = min(shutil.get_terminal_size().columns - 1, 100)
+    return Console(read=input, write=print, open_url=webbrowser.open, width=width)
+
+
+def run_label(db_path: Path, labels_path: Path, target: int, seed: int, console: Console | None = None) -> int:
+    if not db_path.exists():
+        print(f"no job database at {db_path}: run `jobfinder scan` first", file=sys.stderr)
+        return EXIT_CONFIG_ERROR
+    try:
+        labels = load_labels(labels_path)
+    except ValueError as exc:
+        print(exc, file=sys.stderr)
+        return EXIT_CONFIG_ERROR
+    store = JobStore.open(db_path)
+    try:
+        candidates = [stored.job for stored in store.open_jobs()]
+    finally:
+        store.close()
+    queue = labeling_queue(candidates, labels, seed)
+    try:
+        run_session(queue, labels, labels_path, target, console or terminal_console(), lambda: datetime.now(tz=UTC))
+    except KeyboardInterrupt:
+        print("\nStopped; every answer so far is saved.")
+    return EXIT_OK
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="jobfinder", description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
     scan_parser = commands.add_parser("scan", help="fetch every board in the sources file and store the jobs")
     scan_parser.add_argument("--sources", type=Path, default=Path("data/sources.toml"))
     scan_parser.add_argument("--db", type=Path, default=Path("data/jobs.db"))
+    label_parser = commands.add_parser("label", help="label jobs as fit / not fit for the eval set")
+    label_parser.add_argument("--db", type=Path, default=Path("data/jobs.db"))
+    label_parser.add_argument("--labels", type=Path, default=Path("data/labels.jsonl"))
+    label_parser.add_argument("--target", type=int, default=80, help="stop at this many fit / not-fit labels")
+    label_parser.add_argument("--seed", type=int, default=2026, help="fixes the order jobs are offered in")
     args = parser.parse_args(argv)
     if args.command == "scan":
         return run_scan(args.sources, args.db)
+    if args.command == "label":
+        return run_label(args.db, args.labels, args.target, args.seed)
     parser.error(f"unknown command {args.command!r}")
 
 

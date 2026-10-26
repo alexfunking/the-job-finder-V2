@@ -5,8 +5,8 @@ An "opportunity radar": collect postings from public sources -> extract structur
 First module of Jarvis. Plan: Obsidian vault `02_Projects/Jarvis/Jarvis - Roadmap.md`.
 
 ## Current phase
-Phase 1 done (collection: `jobfinder scan` → `data/jobs.db`); Phase 2 (eval set, extraction, scoring) is next. Design and ADRs: vault `02_Projects/Job Finder/Job Finder - Architecture.md`.
-- `src/jobfinder/` is the package: `models.Job` is the source-independent model; `sources/` has one module per ATS; `storage.JobStore` owns the DB; `scan.py` orchestrates; `cli.py` is the entry point.
+Phase 1 done (collection: `jobfinder scan` → `data/jobs.db`). Phase 2 in progress: `jobfinder label` builds the hand-labeled eval set in `data/labels.jsonl`; extraction and scoring are next. Design and ADRs: vault `02_Projects/Job Finder/Job Finder - Architecture.md`.
+- `src/jobfinder/` is the package: `models.Job` is the source-independent model; `sources/` has one module per ATS; `storage.JobStore` owns the DB; `scan.py` orchestrates; `cli.py` is the entry point; `geo.py` has location matching; `labels.py` / `sampling.py` / `labeling.py` are the eval-set labeling tool.
 - Boards to scan live in `data/sources.toml` (hand-maintained, committed).
 - `tools/ats_probe.py` is the Phase 0 tool that maps companies to ATS; keep it working, it is re-run when companies change.
 - Comeet is deferred (ADR-002): its careers API uses company-issued tokens with no third-party permission. Do not call it.
@@ -14,7 +14,7 @@ Phase 1 done (collection: `jobfinder scan` → `data/jobs.db`); Phase 2 (eval se
 ## Hard rules
 - Read-only public job-board APIs only. No scraping or automation of LinkedIn, Drushim, AllJobs, Indeed.
 - Applications are never submitted without explicit human approval.
-- Never commit secrets or personal data (.env, CV, priorities.txt, DB). See .gitignore.
+- Never commit secrets or personal data (.env, CV, priorities.txt, DB, labels.jsonl). See .gitignore.
 - The engine is domain-generic: anything job-specific belongs in config / scoring, not in the source or storage layers.
 
 ## Engineering standards

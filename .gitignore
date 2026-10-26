@@ -3,6 +3,7 @@
 *.pdf
 priorities.txt
 data/ats_map.csv
+data/labels.jsonl
 *.db
 *.sqlite3
 

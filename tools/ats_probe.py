@@ -31,6 +31,8 @@ from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Final
 
+from jobfinder.geo import is_israel_location
+
 USER_AGENT: Final = "job-finder-ats-probe/0.1 (personal job search; contact via GitHub)"
 TIMEOUT_S: Final = 15.0
 MAX_WORKERS: Final = 4
@@ -38,20 +40,6 @@ STALE_AFTER_DAYS: Final = 180
 MAX_ERRORS_IN_CSV: Final = 3
 # Caps paging on huge boards (e.g. 5000+ postings); counts for those are a lower bound.
 MAX_PAGES: Final = 10
-
-ISRAEL_KEYWORDS: Final[tuple[str, ...]] = (
-    "israel", "tel aviv", "tel-aviv", "tlv", "jaffa", "yafo", "herzliya", "glilot", "haifa",
-    "jerusalem", "petah tikva", "petach tikva", "petah-tikva", "petach-tikva", "ramat gan",
-    "ramat hahayal", "ramat hachayal", "raanana", "ra'anana", "rehovot", "rishon", "netanya",
-    "beer sheva", "be'er sheva", "yokneam", "hod hasharon", "kfar saba", "airport city",
-    "or yehuda", "caesarea", "modiin", "givatayim", "bnei brak", "holon", "lod", "ness ziona",
-    "rosh haayin", "rosh ha'ayin", "ashdod", "nazareth", "kiryat",
-)
-# Whole words only: a plain substring check would match "lod" inside "Lodz" or "holon" inside "Holonet".
-ISRAEL_PATTERN: Final = re.compile(
-    r"\b(?:" + "|".join(re.escape(keyword) for keyword in ISRAEL_KEYWORDS) + r")\b",
-    re.IGNORECASE,
-)
 
 NAME_SUFFIXES: Final[tuple[str, ...]] = (
     " ltd", " inc", " technologies", " technology", " software", " security",
@@ -159,10 +147,6 @@ def _name_keys(name: str) -> set[str]:
 def names_match(company_name: str, board_name: str) -> bool:
     """True when the board's reported name is the company's name, ignoring case, punctuation and legal suffixes."""
     return not _name_keys(company_name).isdisjoint(_name_keys(board_name))
-
-
-def is_israel_location(location: str) -> bool:
-    return ISRAEL_PATTERN.search(location) is not None
 
 
 def rejection_reason(hit: BoardHit, company_name: str, today: date) -> str | None:

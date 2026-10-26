@@ -7,6 +7,8 @@ from pathlib import Path
 
 import pytest
 
+from jobfinder.geo import is_israel_location
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
 
 import ats_probe  # noqa: E402
@@ -20,7 +22,6 @@ from ats_probe import (  # noqa: E402
     candidate_slugs,
     detect_fingerprints,
     format_errors,
-    is_israel_location,
     names_match,
     probe_board,
     probe_company,
@@ -50,33 +51,6 @@ def test_candidate_slugs_handles_domain_style_names() -> None:
 def test_candidate_slugs_has_no_duplicates() -> None:
     slugs = candidate_slugs("Wiz")
     assert slugs == ("wiz",)
-
-
-def test_is_israel_location() -> None:
-    assert is_israel_location("Tel Aviv, Israel")
-    assert is_israel_location("Herzliya")
-    assert not is_israel_location("New York, NY")
-    assert not is_israel_location("")
-
-
-def test_is_israel_location_abbreviations_and_hubs() -> None:
-    assert is_israel_location("TLV")
-    assert is_israel_location("Glilot; Tel Aviv")
-    assert is_israel_location("Petah-Tikva")
-    assert is_israel_location("Tel Aviv-Yafo")
-    assert not is_israel_location("Brazil")
-    assert not is_israel_location("London")
-
-
-def test_is_israel_location_matches_whole_words_only() -> None:
-    assert not is_israel_location("Lodz, Poland")
-    assert not is_israel_location("Lodi, CA")
-    assert not is_israel_location("Holonet HQ")
-    assert is_israel_location("Lod")
-    assert is_israel_location("Rishon LeZion")
-    assert is_israel_location("Israel - Raanana")
-    assert is_israel_location("Ra'anana")
-    assert is_israel_location("Kiryat Gat")
 
 
 def test_detect_fingerprints() -> None:
