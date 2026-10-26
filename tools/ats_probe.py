@@ -44,6 +44,11 @@ ISRAEL_KEYWORDS: Final[tuple[str, ...]] = (
     "or yehuda", "caesarea", "modiin", "givatayim", "bnei brak", "holon", "lod", "ness ziona",
     "rosh haayin", "rosh ha'ayin", "ashdod", "nazareth", "kiryat",
 )
+# Whole words only: a plain substring check would match "lod" inside "Lodz" or "holon" inside "Holonet".
+ISRAEL_PATTERN: Final = re.compile(
+    r"\b(?:" + "|".join(re.escape(keyword) for keyword in ISRAEL_KEYWORDS) + r")\b",
+    re.IGNORECASE,
+)
 
 NAME_SUFFIXES: Final[tuple[str, ...]] = (
     " ltd", " inc", " technologies", " technology", " software", " security",
@@ -151,8 +156,7 @@ def names_match(company_name: str, board_name: str) -> bool:
 
 
 def is_israel_location(location: str) -> bool:
-    lowered = location.lower()
-    return any(keyword in lowered for keyword in ISRAEL_KEYWORDS)
+    return ISRAEL_PATTERN.search(location) is not None
 
 
 def rejection_reason(hit: BoardHit, company_name: str, today: date) -> str | None:
