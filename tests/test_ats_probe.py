@@ -288,6 +288,9 @@ def test_names_match_ignores_case_punctuation_and_suffixes() -> None:
     assert names_match("Cato Networks", "Cato Networks Ltd")
     assert names_match("monday.com", "monday.com")
     assert names_match("Check Point Software", "Check Point")
+    assert names_match("Wiz", "Wiz, Inc.")
+    assert names_match("Run:ai", "Run:ai Labs Ltd.")
+    assert names_match("monday.com", "monday.com Ltd.")
     assert not names_match("Port", "Portland General Electric")
     assert not names_match("Via", "Viasat")
 

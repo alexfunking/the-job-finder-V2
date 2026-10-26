@@ -149,7 +149,8 @@ def candidate_slugs(name: str) -> tuple[str, ...]:
 
 
 def _name_keys(name: str) -> set[str]:
-    base = _ascii_fold(name).lower().strip()
+    # Punctuation becomes spaces so "Wiz, Inc." still ends in " inc"; inner dots survive for ".com" / ".io".
+    base = re.sub(r"[^a-z0-9.]+", " ", _ascii_fold(name).lower()).strip(" .")
     keys = {"".join(re.findall(r"[a-z0-9]+", variant)) for variant in (base, _strip_suffixes(base))}
     keys.discard("")
     return keys
