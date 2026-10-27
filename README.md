@@ -2,7 +2,7 @@
 
 Opportunity radar for my job search: pulls postings from public ATS job-board APIs (with full descriptions), scores them against my priorities in code, and sends a daily Telegram digest.
 
-Status: **Phase 1 done** — collection works. Phase 2 (scoring) is in progress: the eval-set labeling tool is in; extraction and scoring are next, then the Telegram digest (Phase 3).
+Status: **Phase 1 done** — collection works. Phase 2 (scoring) is in progress: the eval-set labeling tool and the deterministic pre-filter are in; extraction and scoring are next, then the Telegram digest (Phase 3).
 
 ## Collect jobs
 ```bash
@@ -21,6 +21,13 @@ uv run jobfinder label
 Shows stored jobs one at a time; answer `y` (fit) or `n` (not fit) and say why, `s` to skip, `o` to open the posting, `b` to go back, `q` to quit. Every answer is saved at once to `data/labels.jsonl` (personal, not committed) with a full snapshot of the job, so a later session continues where you stopped and the eval set survives jobs closing. Stops at `--target` (default 80) fit / not-fit labels.
 
 Jobs are offered in a fixed order (`--seed`) that keeps the eval set about 70% Israel jobs, 20% Israel jobs with senior titles and 10% jobs outside Israel, so it is not dominated by the obvious rejects.
+
+## Pre-filter
+```bash
+uv run jobfinder filter                # summary, plus a check against your labels
+uv run jobfinder filter --show kept    # or: rejected, unplaced
+```
+Drops jobs that are clearly out before the extractor sees them: the location must name a place in Israel (a location like "Remote" that names no place is kept), and titles with Senior / Lead / Manager / Staff / Director / ... are rejected unless they also say student, intern or junior. Experience and days on site are left to the extractor. With labels, it lists every job you labeled fit that the filter rejects: those are filter mistakes.
 
 ## Find a company's board
 ```bash
