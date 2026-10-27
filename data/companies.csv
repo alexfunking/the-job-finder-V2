@@ -21,7 +21,7 @@ Payoneer,,
 Pagaya,,
 Lemonade,,
 eToro,,https://www.etoro.com/about/careers/
-Gong,,
+Gong,gongio,
 Similarweb,,
 AppsFlyer,,
 Taboola,,
@@ -48,6 +48,16 @@ Port,,https://www.port.io/careers
 Torq,,
 Aqua Security,,https://www.aquasec.com/about-us/careers/
 Mobileye,,
+# Added 2026-10-28 (second probe run)
+HoneyBook,,
+Optimove,,
+Cymulate,,
+Salt Security,saltsecurity,
+Apiiro,,
+Nanit,,
+Descope,,
+Mixtiles,,
+WalkMe,walkme,
 # Large companies (often Workday / own systems: expect "unknown" without careers_url)
 Check Point Software,,
 CyberArk,,

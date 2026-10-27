@@ -125,3 +125,50 @@ slug = "torq"
 company = "NICE"
 source = "greenhouse"
 slug = "nice"
+
+# Added 2026-10-28 from a second ats_probe run (boards with Israel jobs)
+
+[[board]]
+company = "HoneyBook"
+source = "ashby"
+slug = "honeybook"
+
+[[board]]
+company = "Optimove"
+source = "greenhouse"
+slug = "optimove"
+
+[[board]]
+company = "Cymulate"
+source = "greenhouse"
+slug = "cymulate"
+
+[[board]]
+company = "Salt Security"
+source = "greenhouse"
+slug = "saltsecurity"
+
+[[board]]
+company = "Apiiro"
+source = "greenhouse"
+slug = "apiiro"
+
+[[board]]
+company = "Nanit"
+source = "greenhouse"
+slug = "nanit"
+
+[[board]]
+company = "Gong"
+source = "greenhouse"
+slug = "gongio"
+
+[[board]]
+company = "Descope"
+source = "greenhouse"
+slug = "descope"
+
+[[board]]
+company = "Mixtiles"
+source = "greenhouse"
+slug = "mixtiles"
