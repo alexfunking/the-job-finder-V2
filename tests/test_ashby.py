@@ -52,6 +52,7 @@ def test_parses_real_fixture() -> None:
 def test_description_comes_from_html_with_list_structure() -> None:
     job = fetch(load_fixture()).jobs[0]
     assert job.description_html is not None and "<li>" in job.description_html
+    assert job.description_text is not None
     assert job.description_text.startswith("We’re looking for a senior-level backend engineer")
     assert "\n- " in job.description_text
     assert "\n-\n" not in job.description_text

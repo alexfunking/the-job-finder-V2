@@ -42,7 +42,9 @@ def render_job(job: Job, width: int) -> str:
         f"URL:       {job.url}",
         "-" * width,
     ]
-    for line in job.description_text.splitlines():
+    if job.description_text is None:
+        lines.append("(No description: this job came from an email alert. Press [o] to read it.)")
+    for line in (job.description_text or "").splitlines():
         if not line.strip():
             lines.append("")
             continue

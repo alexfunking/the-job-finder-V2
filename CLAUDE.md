@@ -9,13 +9,14 @@ Read `STATUS.md` at the start of every session: where the work stands, what is n
 
 ## Current phase
 Phase 1 done (collection: `jobfinder scan` → `data/jobs.db`). Phase 2 in progress: `jobfinder label` builds the hand-labeled eval set in `data/labels.jsonl`; extraction and scoring are next. Design and ADRs: vault `02_Projects/Job Finder/Job Finder - Architecture.md`.
-- `src/jobfinder/` is the package: `models.Job` is the source-independent model; `sources/` has one module per ATS; `storage.JobStore` owns the DB; `scan.py` orchestrates; `cli.py` is the entry point; `geo.py` has location matching; `labels.py` / `sampling.py` / `labeling.py` are the eval-set labeling tool; `filtering.py` is the deterministic pre-filter.
+- `src/jobfinder/` is the package: `models.Job` is the source-independent model; `sources/` has one module per ATS; `storage.JobStore` owns the DB; `scan.py` orchestrates; `cli.py` is the entry point; `geo.py` has location matching; `labels.py` / `sampling.py` / `labeling.py` are the eval-set labeling tool; `filtering.py` is the deterministic pre-filter; `alerts.py` + `mailbox.py` + `sources/linkedin_alerts.py` import LinkedIn job-alert emails (read-only IMAP).
 - Boards to scan live in `data/sources.toml` (hand-maintained, committed).
 - `tools/ats_probe.py` is the Phase 0 tool that maps companies to ATS; keep it working, it is re-run when companies change.
 - Comeet is deferred (ADR-002): its careers API uses company-issued tokens with no third-party permission. Do not call it.
 
 ## Hard rules
-- Read-only public job-board APIs only. No scraping or automation of LinkedIn, Drushim, AllJobs, Indeed.
+- Read-only public job-board APIs only. No scraping or automation of LinkedIn, Drushim, AllJobs, Indeed. Reading the job-alert emails these sites send to the user's own mailbox is allowed (ADR-008); following their links to fetch pages is not.
+- Never write the user's email addresses or other personal details into tracked files (the repo is public).
 - Applications are never submitted without explicit human approval.
 - Never commit secrets or personal data (.env, CV, priorities.txt, DB, labels.jsonl). See .gitignore.
 - The engine is domain-generic: anything job-specific belongs in config / scoring, not in the source or storage layers.

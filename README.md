@@ -14,6 +14,14 @@ Exit code: `0` every board was read, `1` some board failed, `2` config error.
 
 Acceptance check (2026-10-26): 10 consecutive scans of 25 boards, 1,450 jobs, 0 duplicate keys, every job with a description.
 
+## Import LinkedIn job alerts
+```bash
+uv run jobfinder alerts            # alerts received in the last 14 days; --days N for more
+```
+Reads the LinkedIn job-alert emails in a dedicated mailbox over IMAP, read-only (nothing is marked as read, moved or sent), and stores each job in the same DB as the board jobs, keyed `linkedin:alerts:<LinkedIn job id>`. Nothing is fetched from LinkedIn itself: the alert carries title, company, location and a link, but no description. Alert jobs are never closed by a scan, since an alert only lists new jobs.
+
+Setup: copy `.env.example` to `.env` and set `ALERTS_EMAIL_ACCOUNT` and `ALERTS_EMAIL_APP_PASSWORD` (a Gmail app password, never the account password).
+
 ## Label the eval set
 ```bash
 uv run jobfinder label

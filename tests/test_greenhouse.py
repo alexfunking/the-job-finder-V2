@@ -53,6 +53,7 @@ def test_parses_real_fixture() -> None:
 def test_description_is_unescaped_and_rendered_as_text() -> None:
     job = fetch(load_fixture()).jobs[0]
     assert job.description_html is not None and job.description_html.startswith("<p>")
+    assert job.description_text is not None
     assert job.description_text.startswith("Cato Networks is the converged network and security cloud")
     for leftover in ("<", "&lt;", "&amp;", "&nbsp;", "\xa0", "data-contrast"):
         assert leftover not in job.description_text

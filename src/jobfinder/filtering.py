@@ -44,7 +44,7 @@ class FilterRules:
     seniority_exempt_words: tuple[str, ...] = ("student", "intern", "internship", "junior")
     # A location made only of these words does not say where the job is, so it is kept for the extractor.
     unplaced_location_words: tuple[str, ...] = (
-        "remote", "anywhere", "worldwide", "global", "emea", "hybrid",
+        "remote", "anywhere", "worldwide", "global", "emea", "mena", "hybrid",
     )
 
 

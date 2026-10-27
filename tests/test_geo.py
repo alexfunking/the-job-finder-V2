@@ -28,3 +28,9 @@ def test_is_israel_location_matches_whole_words_only() -> None:
     assert is_israel_location("Israel - Raanana")
     assert is_israel_location("Ra'anana")
     assert is_israel_location("Kiryat Gat")
+
+
+def test_smaller_towns_and_districts_seen_in_linkedin_alerts() -> None:
+    for location in ("Yehud Monosson", "Ramat HaSharon", "Beer Yaakov", "Yaqum", "Raanana, Center District, Israel"):
+        assert is_israel_location(location), location
+    assert not is_israel_location("Rawabi")

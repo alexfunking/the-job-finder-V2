@@ -42,6 +42,12 @@ def test_rejects_empty_required_text(field: str) -> None:
         make(**{field: "   "})
 
 
+def test_description_may_be_missing_but_not_empty() -> None:
+    assert make(description_text=None).description_text is None
+    without = {k: v for k, v in VALID.items() if k != "description_text"}
+    assert Job.model_validate(without).description_text is None
+
+
 def test_location_may_be_empty() -> None:
     assert make(location="").location == ""
 

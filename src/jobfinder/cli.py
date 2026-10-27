@@ -1,4 +1,4 @@
-"""Command line entry point: `jobfinder scan`, `jobfinder label` and `jobfinder filter`."""
+"""Command line entry point: `jobfinder scan`, `jobfinder alerts`, `jobfinder label` and `jobfinder filter`."""
 
 from __future__ import annotations
 
@@ -7,14 +7,17 @@ import shutil
 import sys
 import webbrowser
 from collections.abc import Mapping, Sequence
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+from jobfinder.alerts import import_alerts
 from jobfinder.config import ConfigError, load_boards
+from jobfinder.envfile import secret
 from jobfinder.filtering import FilterResult, prefilter
 from jobfinder.http import Fetcher, UrllibFetcher
 from jobfinder.labeling import Console, run_session
 from jobfinder.labels import Label, load_labels
+from jobfinder.mailbox import ImapMailbox, Mailbox, MailboxError
 from jobfinder.models import Job
 from jobfinder.sampling import labeling_queue
 from jobfinder.scan import BoardOutcome, ScanReport, scan
@@ -76,6 +79,42 @@ def run_scan(sources_path: Path, db_path: Path, fetcher: Fetcher | None = None) 
     finally:
         store.close()
     return EXIT_BOARD_ERRORS if report.failed else EXIT_OK
+
+
+ALERTS_ACCOUNT_VAR = "ALERTS_EMAIL_ACCOUNT"
+ALERTS_PASSWORD_VAR = "ALERTS_EMAIL_APP_PASSWORD"  # a Gmail app password, never the account password
+
+
+def run_alerts(db_path: Path, env_file: Path, days: int, mailbox: Mailbox | None = None) -> int:
+    now = datetime.now(tz=UTC)
+    since = (now - timedelta(days=days)).date()
+    store = JobStore.open(db_path)
+    try:
+        if mailbox is not None:
+            report = import_alerts(mailbox, store, since, now)
+        else:
+            account, password = secret(ALERTS_ACCOUNT_VAR, env_file), secret(ALERTS_PASSWORD_VAR, env_file)
+            if not account or not password:
+                print(f"set {ALERTS_ACCOUNT_VAR} and {ALERTS_PASSWORD_VAR} in {env_file}", file=sys.stderr)
+                return EXIT_CONFIG_ERROR
+            try:
+                with ImapMailbox(account, password.replace(" ", "")) as imap:
+                    report = import_alerts(imap, store, since, now)
+            except MailboxError as exc:
+                print(f"mailbox error: {exc}", file=sys.stderr)
+                return EXIT_CONFIG_ERROR
+            except OSError as exc:
+                print(f"cannot reach the mailbox: {exc}", file=sys.stderr)
+                return EXIT_BOARD_ERRORS
+        print(f"Alerts since {since.isoformat()}: {report.messages} emails, {report.jobs} job listings, "
+              f"{report.new} new jobs; {store.count(include_closed=False)} open in store")
+        if report.skipped:
+            print(f"Skipped listings ({len(report.skipped)}):")
+            for reason in report.skipped[:20]:
+                print(f"  {reason}")
+    finally:
+        store.close()
+    return EXIT_OK
 
 
 def _replace_unprintable_output() -> None:
@@ -196,6 +235,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     scan_parser = commands.add_parser("scan", help="fetch every board in the sources file and store the jobs")
     scan_parser.add_argument("--sources", type=Path, default=Path("data/sources.toml"))
     scan_parser.add_argument("--db", type=Path, default=Path("data/jobs.db"))
+    alerts_parser = commands.add_parser("alerts", help="import LinkedIn job alerts from the alerts mailbox")
+    alerts_parser.add_argument("--db", type=Path, default=Path("data/jobs.db"))
+    alerts_parser.add_argument("--env", type=Path, default=Path(".env"), help="file with the mailbox credentials")
+    alerts_parser.add_argument("--days", type=int, default=14, help="read alerts received in the last N days")
     label_parser = commands.add_parser("label", help="label jobs as fit / not fit for the eval set")
     label_parser.add_argument("--db", type=Path, default=Path("data/jobs.db"))
     label_parser.add_argument("--labels", type=Path, default=Path("data/labels.jsonl"))
@@ -208,6 +251,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
     if args.command == "scan":
         return run_scan(args.sources, args.db)
+    if args.command == "alerts":
+        return run_alerts(args.db, args.env, args.days)
     if args.command == "label":
         return run_label(args.db, args.labels, args.target, args.seed)
     if args.command == "filter":

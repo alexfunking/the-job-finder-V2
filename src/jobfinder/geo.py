@@ -12,6 +12,11 @@ ISRAEL_KEYWORDS: Final[tuple[str, ...]] = (
     "beer sheva", "be'er sheva", "yokneam", "hod hasharon", "kfar saba", "airport city",
     "or yehuda", "caesarea", "modiin", "givatayim", "bnei brak", "holon", "lod", "ness ziona",
     "rosh haayin", "rosh ha'ayin", "ashdod", "nazareth", "kiryat",
+    # Seen in LinkedIn alerts (2026-10-28), which name smaller towns and districts than ATS boards do.
+    "yehud", "ramat hasharon", "beer yaakov", "be'er ya'akov", "yakum", "yaqum", "bat yam", "hadera",
+    "ashkelon", "beit shemesh", "modi'in", "shoham", "even yehuda", "kfar yona", "karmiel", "afula",
+    "tirat carmel", "migdal haemek", "rosh pina", "sderot", "dimona", "ofakim", "omer", "mevaseret",
+    "center district", "central district", "northern district", "southern district",
 )
 # Whole words only: a plain substring check would match "lod" inside "Lodz" or "holon" inside "Holonet".
 ISRAEL_PATTERN: Final = re.compile(

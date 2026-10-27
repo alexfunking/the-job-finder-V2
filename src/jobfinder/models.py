@@ -23,7 +23,9 @@ class Job(BaseModel):
     title: NonEmptyStr
     location: str
     url: NonEmptyStr
-    description_text: NonEmptyStr
+    # None only for sources that carry no description at all (email alerts). An empty description is
+    # still invalid, so a board posting that lost its text is skipped rather than stored blank.
+    description_text: NonEmptyStr | None = None
     description_html: str | None = None
     published_at: AwareDatetime | None = None
 

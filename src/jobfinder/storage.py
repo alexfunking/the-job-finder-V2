@@ -11,10 +11,10 @@ from typing import Final
 
 from jobfinder.models import Job
 
-SCHEMA_VERSION: Final = 1
+SCHEMA_VERSION: Final = 2
 
-_SCHEMA: Final = """
-CREATE TABLE jobs (
+_JOBS_TABLE: Final = """
+CREATE TABLE {name} (
     key              TEXT PRIMARY KEY,
     source           TEXT NOT NULL,
     slug             TEXT NOT NULL,
@@ -23,15 +23,25 @@ CREATE TABLE jobs (
     title            TEXT NOT NULL,
     location         TEXT NOT NULL,
     url              TEXT NOT NULL,
-    description_text TEXT NOT NULL,
+    description_text TEXT,
     description_html TEXT,
     published_at     TEXT,
     first_seen       TEXT NOT NULL,
     last_seen        TEXT NOT NULL,
     closed_at        TEXT
 );
-CREATE INDEX jobs_board ON jobs (source, slug);
 """
+_INDEX: Final = "CREATE INDEX jobs_board ON jobs (source, slug);"
+
+# v1 -> v2: description_text may be NULL (email alerts carry no description). SQLite cannot drop a
+# NOT NULL constraint in place, so the table is rebuilt and the rows copied.
+_MIGRATE_1_TO_2: Final = (
+    _JOBS_TABLE.format(name="jobs_v2")
+    + "INSERT INTO jobs_v2 SELECT * FROM jobs;\n"
+    + "DROP TABLE jobs;\n"
+    + "ALTER TABLE jobs_v2 RENAME TO jobs;\n"
+    + _INDEX
+)
 
 _JOB_COLUMNS: Final = (
     "source", "slug", "job_id", "company", "title", "location", "url",
@@ -87,11 +97,11 @@ class JobStore:
         version: int = self._db.execute("PRAGMA user_version").fetchone()[0]
         if version == SCHEMA_VERSION:
             return
-        if version != 0:
+        if version > SCHEMA_VERSION:
             raise RuntimeError(f"database schema v{version} is newer than this code (v{SCHEMA_VERSION})")
-        with self._db:
-            self._db.executescript(_SCHEMA)
-            self._db.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
+        script = _JOBS_TABLE.format(name="jobs") + _INDEX if version == 0 else _MIGRATE_1_TO_2
+        # executescript commits on its own, so the whole migration is wrapped in one explicit transaction.
+        self._db.executescript(f"BEGIN;\n{script}\nPRAGMA user_version = {SCHEMA_VERSION};\nCOMMIT;")
 
     def record_board(self, source: str, slug: str, jobs: Sequence[Job], seen_at: datetime) -> BoardUpdate:
         """Store the complete set of open jobs from one board that was fetched successfully.
@@ -138,6 +148,35 @@ class JobStore:
             reopened=len(reopened),
             closed=len(to_close),
         )
+
+    def record_sightings(self, jobs: Sequence[Job], seen_at: datetime) -> int:
+        """Store jobs seen outside a full board listing (an email alert) and return how many are new.
+
+        An alert names a few new jobs, not everything that is open, so a job missing from it says
+        nothing: sightings never close a job. Alerts may be read out of order (a backfill), so the
+        stored first_seen / last_seen only ever move outwards.
+        """
+        now = _to_db_time(seen_at)
+        by_key = {job.key: job for job in jobs}
+        with self._db:
+            placeholders = ", ".join("?" for _ in by_key)
+            known = {
+                row["key"]
+                for row in self._db.execute(f"SELECT key FROM jobs WHERE key IN ({placeholders})", list(by_key))
+            }
+            self._db.executemany(
+                f"""
+                INSERT INTO jobs (key, {", ".join(_JOB_COLUMNS)}, first_seen, last_seen, closed_at)
+                VALUES (?, {", ".join("?" for _ in _JOB_COLUMNS)}, ?, ?, NULL)
+                ON CONFLICT (key) DO UPDATE SET
+                    {", ".join(f"{column} = excluded.{column}" for column in _JOB_COLUMNS)},
+                    first_seen = MIN(first_seen, excluded.first_seen),
+                    last_seen = MAX(last_seen, excluded.last_seen),
+                    closed_at = NULL
+                """,
+                [(key, *self._job_values(job), now, now) for key, job in by_key.items()],
+            )
+        return len(by_key.keys() - known)
 
     def get(self, key: str) -> StoredJob | None:
         row = self._db.execute("SELECT * FROM jobs WHERE key = ?", (key,)).fetchone()

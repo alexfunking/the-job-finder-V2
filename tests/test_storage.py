@@ -142,3 +142,64 @@ def test_refuses_a_database_from_a_newer_schema(tmp_path: Path) -> None:
     connection.close()
     with pytest.raises(RuntimeError, match="newer than this code"):
         JobStore.open(path)
+
+
+def test_v1_database_is_migrated_keeping_its_rows(tmp_path: Path) -> None:
+    path = tmp_path / "v1.db"
+    connection = sqlite3.connect(path)
+    connection.executescript(
+        """
+        CREATE TABLE jobs (
+            key TEXT PRIMARY KEY, source TEXT NOT NULL, slug TEXT NOT NULL, job_id TEXT NOT NULL,
+            company TEXT NOT NULL, title TEXT NOT NULL, location TEXT NOT NULL, url TEXT NOT NULL,
+            description_text TEXT NOT NULL, description_html TEXT, published_at TEXT,
+            first_seen TEXT NOT NULL, last_seen TEXT NOT NULL, closed_at TEXT
+        );
+        CREATE INDEX jobs_board ON jobs (source, slug);
+        INSERT INTO jobs VALUES ('greenhouse:acme:1', 'greenhouse', 'acme', '1', 'Acme', 'Engineer', 'Tel Aviv',
+            'https://example.test/acme/1', 'Build things.', NULL, NULL,
+            '2026-10-26T08:00:00+00:00', '2026-10-27T08:00:00+00:00', NULL);
+        PRAGMA user_version = 1;
+        """
+    )
+    connection.close()
+
+    store = JobStore.open(path)
+    stored = store.get("greenhouse:acme:1")
+    assert stored is not None and stored.job.description_text == "Build things."
+    assert stored.first_seen == T1
+    store.record_sightings([job("2").model_copy(update={"description_text": None})], T2)
+    assert store.count() == 2
+    store.close()
+    assert sqlite3.connect(path).execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION == 2
+
+
+def alert_job(job_id: str) -> Job:
+    return job(job_id, slug="alerts", source="linkedin").model_copy(update={"description_text": None})
+
+
+def test_sightings_insert_and_report_only_new_jobs(store: JobStore) -> None:
+    assert store.record_sightings([alert_job("1"), alert_job("2")], T1) == 2
+    assert store.record_sightings([alert_job("2"), alert_job("3")], T2) == 1
+    assert store.count(include_closed=False) == 3
+    stored = store.get("linkedin:alerts:1")
+    assert stored is not None and stored.job.description_text is None
+
+
+def test_sightings_never_close_jobs_missing_from_the_alert(store: JobStore) -> None:
+    store.record_sightings([alert_job("1")], T1)
+    store.record_sightings([alert_job("2")], T2)
+    assert {s.job.key for s in store.open_jobs()} == {"linkedin:alerts:1", "linkedin:alerts:2"}
+
+
+def test_sightings_read_out_of_order_keep_the_widest_seen_range(store: JobStore) -> None:
+    store.record_sightings([alert_job("1")], T2)
+    store.record_sightings([alert_job("1")], T1)
+    store.record_sightings([alert_job("1")], T3)
+    stored = store.get("linkedin:alerts:1")
+    assert stored is not None
+    assert (stored.first_seen, stored.last_seen) == (T1, T3)
+
+
+def test_no_sightings_is_a_no_op(store: JobStore) -> None:
+    assert store.record_sightings([], T1) == 0

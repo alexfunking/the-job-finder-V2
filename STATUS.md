@@ -6,13 +6,15 @@ Source of truth for the plan: Obsidian vault `C:\Users\alex0\Vault\02_Projects\J
 Design and ADRs: `C:\Users\alex0\Vault\02_Projects\Job Finder\Job Finder - Architecture.md` (ADR-001 to ADR-007).
 
 ## Where we are
-**Phase 2 (measurable scoring), steps 1–2 of 7.** The labeling tool and the deterministic pre-filter are built; the hand-labeled eval set does not exist yet (`data/labels.jsonl` is missing), so the filter is not measured yet.
+**Phase 2 (measurable scoring), steps 1–2 of 7, plus a new source: LinkedIn job alerts by email.** The labeling tool, the deterministic pre-filter and `jobfinder alerts` are built; the hand-labeled eval set does not exist yet (`data/labels.jsonl` is missing), so the filter is not measured yet.
 
-Repo: https://github.com/alexfunking/the-job-finder-V2 (public), `main` tracks `origin/main`. Last pushed `f4f57dc`; the pre-filter is committed locally, not pushed yet. 214 tests pass, `mypy --strict` clean.
+Repo: https://github.com/alexfunking/the-job-finder-V2 (public), `main` tracks `origin/main`. Last pushed `f4f57dc`; later commits are local only (check `git status -sb`). 243 tests pass, `mypy --strict` clean.
 
 ## Done
 - **Phase 0 — ATS mapping** (`tools/ats_probe.py`): 58 companies probed. 25 have a public API (21 Greenhouse, 4 Ashby) with 408 Israel jobs. Comeet (9 companies) deferred, ADR-002. 14 large companies have no public API (Workday or in-house).
 - **Phase 1 — collection** (`jobfinder scan`): Greenhouse and Ashby sources, SQLite store with first_seen / last_seen / closed_at, boards in `data/sources.toml`. Acceptance check: 10 runs, 1,450 jobs, 0 duplicate keys, every job has a full description.
+- **More boards (2026-10-28):** 9 more companies from a second probe run; 34 boards, ~1,600 open jobs. Little gain: board companies rarely post student / junior roles.
+- **LinkedIn alerts source (2026-10-28, ADR-008)** (`jobfinder alerts`): reads LinkedIn job-alert emails from a dedicated Gmail mailbox used only for alerts (~2,000 alerts since 2025-04) over read-only IMAP. Credentials live only in `.env` (`ALERTS_EMAIL_ACCOUNT`, `ALERTS_EMAIL_APP_PASSWORD`, an app password). The parser handles English and Hebrew alerts (296/296 jobs on a 53-alert sample). Alert jobs have no description (`description_text=None`, DB schema v2) and are never closed. First import (14 days): 18 jobs, all pass the filter, mostly junior / graduate roles at companies without an API (NVIDIA, Mobileye, Intuit, Dell, Check Point).
 - **Phase 2.1 — labeling tool** (`jobfinder label`): shows one job at a time; `y` / `n` with a required reason, `s` skip, `o` open, `b` back, `q` quit. Appends to `data/labels.jsonl` (gitignored, personal) with a full job snapshot. Seeded order: 70% Israel, 20% Israel senior titles, 10% outside Israel.
 
 ## Next steps
@@ -30,6 +32,9 @@ Repo: https://github.com/alexfunking/the-job-finder-V2 (public), `main` tracks `
 - Archive the old repo `alexfunking/The_job_Finder`.
 
 ## Known gaps
+- Alert jobs never close (an alert lists only new jobs). Phase 3 must show only recently first-seen alert jobs, or expire them by age.
+- Alert jobs have no description, so the extractor and scoring work from the title only for them.
+- Only LinkedIn alerts are parsed. AllJobs / Drushim alerts need their own parser once the user subscribes them to the same mailbox.
 - Only 2 student and 1 junior titles exist across the 25 boards: the eval set may get few "fit" labels, and the sources may not match a student / junior search. Raise with the user after labeling.
 - The old repo `alexfunking/The_job_Finder` is public and contains `priorities.txt` (personal). Archiving does not hide it; making it private does.
 - Closing and reopening jobs is verified only in unit tests; real behavior shows after days of daily scans.

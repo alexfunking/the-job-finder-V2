@@ -40,7 +40,7 @@ def test_round_trip_keeps_the_full_job_snapshot(tmp_path: Path) -> None:
     append_label(path, original)
     loaded = load_labels(path)
     assert loaded == {original.key: original}
-    assert loaded[original.key].job.description_text.endswith("ניסיון בפייתון")
+    assert (loaded[original.key].job.description_text or "").endswith("ניסיון בפייתון")
 
 
 def test_latest_label_for_a_key_wins(tmp_path: Path) -> None:
