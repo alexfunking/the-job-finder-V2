@@ -19,14 +19,14 @@ Repo: https://github.com/alexfunking/the-job-finder-V2 (public), `main` tracks `
 1. **User:** label 80 jobs with `uv run jobfinder label` (~2 hours, can be split across sessions). Check in on progress: count labels and how many are "fit" (fewer than 15 fit makes recall noisy).
 2. **Code, next:** deterministic filter (location + Senior/Lead titles), reusing `jobfinder.geo`. Can be built before labeling ends; measure it on the labels once they exist.
 3. `Extractor` interface: `years_required`, `onsite_days`, `is_student`, `location`, `stack`.
-4. Two implementations: `ApiExtractor` on Claude Haiku 5.5 (`effort: low`) and `OllamaExtractor` (local) — ADR-006. Pick by eval: go local if within 3–5 precision points.
+4. Two implementations: `ApiExtractor` and `OllamaExtractor` (local) — ADR-006. For now the API one is **Gemini**: the key is in `.env` as `GEMINI_API_KEY` (gitignored, verified 2026-10-28 by listing models). Claude Haiku 5.5 is added later as another implementation, so keep the interface provider-neutral. Pick by eval: go local if within 3–5 precision points.
 5. Score computed in code from `priorities.txt` (not by the model).
 6. `jobfinder eval` printing precision and recall. Phase 2 is done when goals G1 and G2 hold on the eval set.
 7. Then Phase 3: daily Telegram digest, including a weekly watchlist of careers pages for companies without an API (ADR-007), and grouping of logical duplicates (same company + title + location, 16 groups seen).
 
 ## Open tasks on the user's side
 - Label the eval set (above).
-- Create an account at console.anthropic.com, load credit, create an API key (needed at step 4).
+- Create an account at console.anthropic.com, load credit, create an API key (no longer blocking: Gemini is used meanwhile).
 - Archive the old repo `alexfunking/The_job_Finder`.
 
 ## Known gaps
