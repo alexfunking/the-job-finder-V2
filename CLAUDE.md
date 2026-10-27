@@ -4,6 +4,9 @@
 An "opportunity radar": collect postings from public sources -> extract structured fields -> score in code against `priorities.txt` -> Telegram digest -> (later) assisted apply.
 First module of Jarvis. Plan: Obsidian vault `02_Projects/Jarvis/Jarvis - Roadmap.md`.
 
+## Start here
+Read `STATUS.md` at the start of every session: where the work stands, what is next, and how the user likes to work. Update it at the end of every session.
+
 ## Current phase
 Phase 1 done (collection: `jobfinder scan` → `data/jobs.db`). Phase 2 in progress: `jobfinder label` builds the hand-labeled eval set in `data/labels.jsonl`; extraction and scoring are next. Design and ADRs: vault `02_Projects/Job Finder/Job Finder - Architecture.md`.
 - `src/jobfinder/` is the package: `models.Job` is the source-independent model; `sources/` has one module per ATS; `storage.JobStore` owns the DB; `scan.py` orchestrates; `cli.py` is the entry point; `geo.py` has location matching; `labels.py` / `sampling.py` / `labeling.py` are the eval-set labeling tool.
