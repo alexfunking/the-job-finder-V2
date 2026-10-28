@@ -39,7 +39,7 @@ uv run jobfinder label
 ```
 Shows stored jobs one at a time; answer `y` (fit) or `n` (not fit) and say why, `s` to skip, `o` to open the posting, `b` to go back, `q` to quit. Every answer is saved at once to `data/labels.jsonl` (personal, not committed) with a full snapshot of the job, so a later session continues where you stopped and the eval set survives jobs closing. Stops at `--target` (default 80) fit / not-fit labels.
 
-Jobs are offered in a fixed order (`--seed`) that keeps the eval set about 70% Israel jobs, 20% Israel jobs with senior titles and 10% jobs outside Israel, so it is not dominated by the obvious rejects.
+Jobs are offered in a fixed order (`--seed`) that keeps the eval set about 30% email-alert jobs (mostly junior, title only), 40% board jobs the pre-filter keeps, 20% Israel jobs the filter rejects and 10% jobs outside Israel. That way it has enough "fit" labels to measure recall, is not dominated by the obvious rejects, and still catches the filter's mistakes.
 
 ## Pre-filter
 ```bash
@@ -47,6 +47,13 @@ uv run jobfinder filter                # summary, plus a check against your labe
 uv run jobfinder filter --show kept    # or: rejected, unplaced
 ```
 Drops jobs that are clearly out before the extractor sees them: the location must name a place in Israel (a location like "Remote" that names no place is kept), and titles with Senior / Lead / Manager / Staff / Director / ... are rejected unless they also say student, intern or junior. Experience and days on site are left to the extractor. With labels, it lists every job you labeled fit that the filter rejects: those are filter mistakes.
+
+## Try an extractor
+```bash
+uv run jobfinder extract                          # Gemini (GEMINI_API_KEY in .env), 5 jobs
+uv run jobfinder extract --extractor ollama --limit 10 --model qwen2.5:32b
+```
+Runs an extractor on the first jobs of the labeling order and prints what it reads from each posting: `years_required`, `onsite_days`, `is_student`, `location` and `stack`, plus the token totals. Nothing is stored; this is for checking a model by eye. Both extractors get the same instructions and JSON schema (`src/jobfinder/extraction/base.py`), and only the public posting text is sent, never your priorities. A busy model (HTTP 503) or a per-minute quota (429) is retried after 5, 20 and 60 seconds.
 
 ## Find a company's board
 ```bash

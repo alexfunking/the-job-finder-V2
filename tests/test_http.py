@@ -7,7 +7,7 @@ import urllib.request
 
 import pytest
 
-from jobfinder.http import FetchError, UrllibFetcher, parse_response
+from jobfinder.http import FetchError, UrllibFetcher, UrllibPoster, parse_response
 
 
 def test_parse_response_200_returns_payload() -> None:
@@ -77,3 +77,52 @@ def test_urllib_fetcher_wraps_network_errors(monkeypatch: pytest.MonkeyPatch, er
     monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
     with pytest.raises(FetchError, match=type(error).__name__):
         UrllibFetcher().get_json("https://example.test/x")
+
+
+def _http_error(url: str, code: int, body: bytes = b"") -> urllib.error.HTTPError:
+    return urllib.error.HTTPError(url, code, "error", email.message.Message(), io.BytesIO(body))
+
+
+def test_urllib_poster_sends_json_and_retries_busy_answers(monkeypatch: pytest.MonkeyPatch) -> None:
+    answers: list[_Response | urllib.error.HTTPError] = [
+        _http_error("u", 503), _http_error("u", 429), _Response(200, b'{"ok": true}'),
+    ]
+    seen: list[urllib.request.Request] = []
+
+    def fake_urlopen(request: urllib.request.Request, timeout: float) -> _Response:
+        seen.append(request)
+        answer = answers.pop(0)
+        if isinstance(answer, Exception):
+            raise answer
+        return answer
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+    slept: list[float] = []
+    poster = UrllibPoster(retry_delays_s=(1.0, 2.0, 3.0), sleep=slept.append)
+    assert poster.post_json("https://example.test/m", {"q": 1}, {"x-key": "k"}) == {"ok": True}
+    assert slept == [1.0, 2.0]
+    assert seen[0].data == b'{"q": 1}'
+    assert seen[0].get_header("X-key") == "k"
+    assert seen[0].get_method() == "POST"
+
+
+def test_urllib_poster_gives_up_after_the_last_retry(monkeypatch: pytest.MonkeyPatch) -> None:
+    def fake_urlopen(request: urllib.request.Request, timeout: float) -> _Response:
+        raise _http_error(request.full_url, 429, b'{\n  "error": "quota"\n}')
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+    slept: list[float] = []
+    with pytest.raises(FetchError, match='HTTP 429: { "error": "quota" }'):
+        UrllibPoster(retry_delays_s=(1.0,), sleep=slept.append).post_json("https://example.test/m", {}, {})
+    assert slept == [1.0]
+
+
+def test_urllib_poster_does_not_retry_other_errors(monkeypatch: pytest.MonkeyPatch) -> None:
+    def fake_urlopen(request: urllib.request.Request, timeout: float) -> _Response:
+        raise _http_error(request.full_url, 400, b"bad model")
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+    slept: list[float] = []
+    with pytest.raises(FetchError, match="HTTP 400: bad model"):
+        UrllibPoster(sleep=slept.append).post_json("https://example.test/m", {}, {})
+    assert slept == []

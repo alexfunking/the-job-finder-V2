@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import json
+import time
 import urllib.error
 import urllib.request
+from collections.abc import Callable, Mapping, Sequence
 from typing import Final, Protocol
 
 USER_AGENT: Final = "job-finder/0.1 (personal job search; contact via GitHub)"
 TIMEOUT_S: Final = 30.0
+RETRY_STATUSES: Final = frozenset({429, 503})
 
 
 class FetchError(Exception):
@@ -50,3 +53,54 @@ class UrllibFetcher:
         except (urllib.error.URLError, TimeoutError, OSError) as exc:
             raise FetchError(f"{type(exc).__name__}: {exc}") from exc
         return parse_response(status, body)
+
+
+class Poster(Protocol):
+    def post_json(self, url: str, payload: object, headers: Mapping[str, str]) -> object:
+        """POST `payload` as JSON and return the parsed JSON answer, or raise FetchError (404 included)."""
+        ...
+
+
+class UrllibPoster:
+    """JSON-over-HTTP calls to model APIs (the extractor); slower than board fetches, so a longer timeout.
+
+    A busy model (503) or a per-minute quota (429) usually clears within a minute, so those are retried
+    after each delay in `retry_delays_s`; every other failure is raised at once.
+    """
+
+    def __init__(
+        self,
+        timeout_s: float = 180.0,
+        retry_delays_s: Sequence[float] = (5.0, 20.0, 60.0),
+        sleep: Callable[[float], None] = time.sleep,
+    ) -> None:
+        self._timeout_s = timeout_s
+        self._retry_delays_s = tuple(retry_delays_s)
+        self._sleep = sleep
+
+    def post_json(self, url: str, payload: object, headers: Mapping[str, str]) -> object:
+        request = urllib.request.Request(
+            url,
+            data=json.dumps(payload).encode("utf-8"),
+            headers={"Content-Type": "application/json", "User-Agent": USER_AGENT, **headers},
+            method="POST",
+        )
+        for delay in (*self._retry_delays_s, None):
+            try:
+                with urllib.request.urlopen(request, timeout=self._timeout_s) as response:
+                    body: bytes = response.read()
+                break
+            except urllib.error.HTTPError as exc:
+                if exc.code in RETRY_STATUSES and delay is not None:
+                    self._sleep(delay)
+                    continue
+                # The error body says why (bad model name, quota, ...); it never echoes the request headers.
+                detail = " ".join(exc.read().decode("utf-8", errors="replace").split())[:300]
+                raise FetchError(f"HTTP {exc.code}: {detail}") from exc
+            except (urllib.error.URLError, TimeoutError, OSError) as exc:
+                raise FetchError(f"{type(exc).__name__}: {exc}") from exc
+        try:
+            parsed: object = json.loads(body)
+        except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+            raise FetchError(f"invalid JSON: {exc}") from exc
+        return parsed

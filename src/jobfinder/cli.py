@@ -1,10 +1,12 @@
-"""Command line entry point: `jobfinder scan`, `jobfinder alerts`, `jobfinder label` and `jobfinder filter`."""
+"""Command line entry point: `jobfinder scan`, `alerts`, `label`, `filter` and `extract`."""
 
 from __future__ import annotations
 
 import argparse
+import json
 import shutil
 import sys
+import time
 import webbrowser
 from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime, timedelta
@@ -13,8 +15,9 @@ from pathlib import Path
 from jobfinder.alerts import import_alerts
 from jobfinder.config import ConfigError, load_boards
 from jobfinder.envfile import secret
+from jobfinder.extraction import EXTRACTORS, ExtractionError, Extractor, build_extractor
 from jobfinder.filtering import FilterResult, prefilter
-from jobfinder.http import Fetcher, UrllibFetcher
+from jobfinder.http import Fetcher, UrllibFetcher, UrllibPoster
 from jobfinder.labeling import Console, run_session
 from jobfinder.labels import Label, load_labels
 from jobfinder.mailbox import ImapMailbox, Mailbox, MailboxError
@@ -229,6 +232,59 @@ def is_shown(result: FilterResult, show: str) -> bool:
     return result.kept and bool(result.notes)  # "unplaced"
 
 
+def run_extract(
+    db_path: Path,
+    env_file: Path,
+    kind: str,
+    model: str | None,
+    limit: int,
+    seed: int,
+    extractor: Extractor | None = None,
+) -> int:
+    """Run an extractor on the first `limit` jobs of the labeling order and print what it reads.
+
+    For trying an extractor or a model by eye; nothing is stored. Measuring them is `jobfinder eval`.
+    """
+    if not db_path.exists():
+        print(f"no job database at {db_path}: run `jobfinder scan` first", file=sys.stderr)
+        return EXIT_CONFIG_ERROR
+    if extractor is None:
+        try:
+            extractor = build_extractor(kind, model, env_file, UrllibPoster())
+        except ValueError as exc:
+            print(exc, file=sys.stderr)
+            return EXIT_CONFIG_ERROR
+    store = JobStore.open(db_path)
+    try:
+        candidates = [stored.job for stored in store.open_jobs()]
+    finally:
+        store.close()
+
+    _replace_unprintable_output()
+    print(f"Extractor: {extractor.name}")
+    failed = 0
+    input_tokens = output_tokens = 0
+    started = time.monotonic()
+    jobs = labeling_queue(candidates, {}, seed)[:limit]
+    for job in jobs:
+        print()
+        print(f"{job.company} | {job.title} | {job.location or '(none)'}"
+              + ("  [title only]" if job.description_text is None else ""))
+        try:
+            result = extractor.extract(job)
+        except ExtractionError as exc:
+            failed += 1
+            print(f"  ERROR {exc}")
+            continue
+        print(f"  {json.dumps(result.extraction.model_dump(), ensure_ascii=False)}")
+        input_tokens += result.input_tokens or 0
+        output_tokens += result.output_tokens or 0
+    print()
+    print(f"{len(jobs) - failed} extracted, {failed} failed in {time.monotonic() - started:.0f}s; "
+          f"tokens: {input_tokens} in, {output_tokens} out")
+    return EXIT_BOARD_ERRORS if failed else EXIT_OK
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="jobfinder", description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
@@ -248,6 +304,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     filter_parser.add_argument("--db", type=Path, default=Path("data/jobs.db"))
     filter_parser.add_argument("--labels", type=Path, default=Path("data/labels.jsonl"))
     filter_parser.add_argument("--show", choices=("kept", "rejected", "unplaced"), help="also list these jobs")
+    extract_parser = commands.add_parser("extract", help="try an extractor on a few jobs and print its answers")
+    extract_parser.add_argument("--db", type=Path, default=Path("data/jobs.db"))
+    extract_parser.add_argument("--env", type=Path, default=Path(".env"), help="file with the API key")
+    extract_parser.add_argument("--extractor", choices=EXTRACTORS, default="gemini")
+    extract_parser.add_argument("--model", help="model name; each extractor has a default")
+    extract_parser.add_argument("--limit", type=int, default=5, help="how many jobs to run on")
+    extract_parser.add_argument("--seed", type=int, default=2026, help="same job order as `jobfinder label`")
     args = parser.parse_args(argv)
     if args.command == "scan":
         return run_scan(args.sources, args.db)
@@ -257,6 +320,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         return run_label(args.db, args.labels, args.target, args.seed)
     if args.command == "filter":
         return run_filter(args.db, args.labels, args.show)
+    if args.command == "extract":
+        return run_extract(args.db, args.env, args.extractor, args.model, args.limit, args.seed)
     parser.error(f"unknown command {args.command!r}")
 
 
