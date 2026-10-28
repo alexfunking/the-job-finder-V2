@@ -22,6 +22,17 @@ Reads the LinkedIn job-alert emails in a dedicated mailbox over IMAP, read-only 
 
 Setup: copy `.env.example` to `.env` and set `ALERTS_EMAIL_ACCOUNT` and `ALERTS_EMAIL_APP_PASSWORD` (a Gmail app password, never the account password).
 
+## Daily run
+`scripts/daily.cmd` runs `jobfinder scan` and then `jobfinder alerts --days 3`, appending everything to `data/logs/daily.log`. A Windows Task Scheduler task runs it every morning; to create one:
+```powershell
+$repo = (Get-Location).Path
+Register-ScheduledTask -TaskName 'job-finder daily scan' `
+  -Action (New-ScheduledTaskAction -Execute cmd.exe -Argument "/c `"$repo\scripts\daily.cmd`"" -WorkingDirectory $repo) `
+  -Trigger (New-ScheduledTaskTrigger -Daily -At 08:00) `
+  -Settings (New-ScheduledTaskSettingsSet -StartWhenAvailable -RunOnlyIfNetworkAvailable -ExecutionTimeLimit (New-TimeSpan -Minutes 30))
+```
+`-StartWhenAvailable` runs a missed morning run as soon as the computer is back on.
+
 ## Label the eval set
 ```bash
 uv run jobfinder label

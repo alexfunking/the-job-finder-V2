@@ -14,3 +14,6 @@ __pycache__/
 venv/
 .mypy_cache/
 .pytest_cache/
+
+# logs of scheduled runs (may name the alerts mailbox)
+data/logs/
