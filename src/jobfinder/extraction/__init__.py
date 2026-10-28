@@ -7,12 +7,14 @@ from typing import Final
 
 from jobfinder.envfile import secret
 from jobfinder.extraction.base import Extraction, ExtractionError, ExtractionResult, Extractor
+from jobfinder.extraction.cache import CachedExtractor
 from jobfinder.extraction.gemini import GeminiExtractor
 from jobfinder.extraction.ollama import OllamaExtractor
 from jobfinder.http import Poster
 
 __all__ = [
-    "EXTRACTORS", "Extraction", "ExtractionError", "ExtractionResult", "Extractor", "build_extractor",
+    "EXTRACTORS", "CachedExtractor", "Extraction", "ExtractionError", "ExtractionResult", "Extractor",
+    "build_extractor",
 ]
 
 EXTRACTORS: Final = ("gemini", "ollama")

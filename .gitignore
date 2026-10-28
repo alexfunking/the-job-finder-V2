@@ -4,6 +4,7 @@
 priorities.txt
 data/ats_map.csv
 data/labels.jsonl
+data/suggestions.jsonl
 *.db
 *.sqlite3
 

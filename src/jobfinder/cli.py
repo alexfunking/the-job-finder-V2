@@ -15,11 +15,11 @@ from pathlib import Path
 from jobfinder.alerts import import_alerts
 from jobfinder.config import ConfigError, load_boards
 from jobfinder.envfile import secret
-from jobfinder.extraction import EXTRACTORS, ExtractionError, Extractor, build_extractor
+from jobfinder.extraction import EXTRACTORS, CachedExtractor, ExtractionError, Extractor, build_extractor
 from jobfinder.filtering import FilterResult, prefilter
 from jobfinder.http import Fetcher, UrllibFetcher, UrllibPoster
 from jobfinder.labeling import Console, run_session
-from jobfinder.labels import Label, load_labels
+from jobfinder.labels import Label, load_labels, load_suggestions
 from jobfinder.mailbox import ImapMailbox, Mailbox, MailboxError
 from jobfinder.models import Job
 from jobfinder.sampling import labeling_queue
@@ -132,12 +132,20 @@ def terminal_console() -> Console:
     return Console(read=input, write=print, open_url=webbrowser.open, width=width)
 
 
-def run_label(db_path: Path, labels_path: Path, target: int, seed: int, console: Console | None = None) -> int:
+def run_label(
+    db_path: Path,
+    labels_path: Path,
+    target: int,
+    seed: int,
+    console: Console | None = None,
+    suggestions_path: Path | None = None,
+) -> int:
     if not db_path.exists():
         print(f"no job database at {db_path}: run `jobfinder scan` first", file=sys.stderr)
         return EXIT_CONFIG_ERROR
     try:
         labels = load_labels(labels_path)
+        suggestions = load_suggestions(suggestions_path) if suggestions_path else {}
     except ValueError as exc:
         print(exc, file=sys.stderr)
         return EXIT_CONFIG_ERROR
@@ -147,8 +155,13 @@ def run_label(db_path: Path, labels_path: Path, target: int, seed: int, console:
     finally:
         store.close()
     queue = labeling_queue(candidates, labels, seed)
+    # Jobs with a suggestion first, in queue order: they were drawn from this same order to be reviewed.
+    queue.sort(key=lambda job: job.key not in suggestions)
     try:
-        run_session(queue, labels, labels_path, target, console or terminal_console(), lambda: datetime.now(tz=UTC))
+        run_session(
+            queue, labels, labels_path, target, console or terminal_console(), lambda: datetime.now(tz=UTC),
+            suggestions,
+        )
     except KeyboardInterrupt:
         print("\nStopped; every answer so far is saved.")
     return EXIT_OK
@@ -240,10 +253,12 @@ def run_extract(
     limit: int,
     seed: int,
     extractor: Extractor | None = None,
+    use_cache: bool = True,
 ) -> int:
     """Run an extractor on the first `limit` jobs of the labeling order and print what it reads.
 
-    For trying an extractor or a model by eye; nothing is stored. Measuring them is `jobfinder eval`.
+    Answers are saved in the job store and reused while the job's text and the prompt stay the same, so
+    a rerun costs nothing; `use_cache=False` asks the model again (and overwrites the saved answer).
     """
     if not db_path.exists():
         print(f"no job database at {db_path}: run `jobfinder scan` first", file=sys.stderr)
@@ -257,15 +272,19 @@ def run_extract(
     store = JobStore.open(db_path)
     try:
         candidates = [stored.job for stored in store.open_jobs()]
+        if use_cache:
+            extractor = CachedExtractor(extractor, store, lambda: datetime.now(tz=UTC))
+        return _print_extractions(extractor, labeling_queue(candidates, {}, seed)[:limit])
     finally:
         store.close()
 
+
+def _print_extractions(extractor: Extractor, jobs: Sequence[Job]) -> int:
     _replace_unprintable_output()
     print(f"Extractor: {extractor.name}")
-    failed = 0
+    failed = cached = 0
     input_tokens = output_tokens = 0
     started = time.monotonic()
-    jobs = labeling_queue(candidates, {}, seed)[:limit]
     for job in jobs:
         print()
         print(f"{job.company} | {job.title} | {job.location or '(none)'}"
@@ -276,12 +295,16 @@ def run_extract(
             failed += 1
             print(f"  ERROR {exc}")
             continue
-        print(f"  {json.dumps(result.extraction.model_dump(), ensure_ascii=False)}")
-        input_tokens += result.input_tokens or 0
-        output_tokens += result.output_tokens or 0
+        print(f"  {json.dumps(result.extraction.model_dump(), ensure_ascii=False)}"
+              + ("  (saved)" if result.cached else ""))
+        if result.cached:
+            cached += 1
+        else:
+            input_tokens += result.input_tokens or 0
+            output_tokens += result.output_tokens or 0
     print()
-    print(f"{len(jobs) - failed} extracted, {failed} failed in {time.monotonic() - started:.0f}s; "
-          f"tokens: {input_tokens} in, {output_tokens} out")
+    print(f"{len(jobs) - failed} extracted ({cached} from saved answers), {failed} failed "
+          f"in {time.monotonic() - started:.0f}s; tokens spent: {input_tokens} in, {output_tokens} out")
     return EXIT_BOARD_ERRORS if failed else EXIT_OK
 
 
@@ -300,6 +323,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     label_parser.add_argument("--labels", type=Path, default=Path("data/labels.jsonl"))
     label_parser.add_argument("--target", type=int, default=80, help="stop at this many fit / not-fit labels")
     label_parser.add_argument("--seed", type=int, default=2026, help="fixes the order jobs are offered in")
+    label_parser.add_argument(
+        "--suggestions", type=Path, default=Path("data/suggestions.jsonl"), help="proposed labels to accept or override"
+    )
     filter_parser = commands.add_parser("filter", help="apply the location / seniority pre-filter and report")
     filter_parser.add_argument("--db", type=Path, default=Path("data/jobs.db"))
     filter_parser.add_argument("--labels", type=Path, default=Path("data/labels.jsonl"))
@@ -311,17 +337,20 @@ def main(argv: Sequence[str] | None = None) -> int:
     extract_parser.add_argument("--model", help="model name; each extractor has a default")
     extract_parser.add_argument("--limit", type=int, default=5, help="how many jobs to run on")
     extract_parser.add_argument("--seed", type=int, default=2026, help="same job order as `jobfinder label`")
+    extract_parser.add_argument("--no-cache", action="store_true", help="ask the model again, ignoring saved answers")
     args = parser.parse_args(argv)
     if args.command == "scan":
         return run_scan(args.sources, args.db)
     if args.command == "alerts":
         return run_alerts(args.db, args.env, args.days)
     if args.command == "label":
-        return run_label(args.db, args.labels, args.target, args.seed)
+        return run_label(args.db, args.labels, args.target, args.seed, suggestions_path=args.suggestions)
     if args.command == "filter":
         return run_filter(args.db, args.labels, args.show)
     if args.command == "extract":
-        return run_extract(args.db, args.env, args.extractor, args.model, args.limit, args.seed)
+        return run_extract(
+            args.db, args.env, args.extractor, args.model, args.limit, args.seed, use_cache=not args.no_cache
+        )
     parser.error(f"unknown command {args.command!r}")
 
 

@@ -12,10 +12,11 @@ from datetime import datetime
 from pathlib import Path
 from typing import Final
 
-from jobfinder.labels import Label, Verdict, append_label
+from jobfinder.labels import Label, Suggestion, Verdict, append_label
 from jobfinder.models import Job
 
 PROMPT: Final = "[y] fit  [n] not fit  [s] skip  [o] open in browser  [b] back  [q] quit > "
+SUGGESTED_PROMPT: Final = "[Enter] accept  " + PROMPT
 ANSWERS: Final[dict[str, Verdict]] = {"y": "fit", "n": "no_fit", "s": "skip"}
 VERDICT_NAMES: Final[dict[Verdict, str]] = {"fit": "fit", "no_fit": "not fit", "skip": "skipped"}
 # Below this many "fit" labels, recall is measured on too few jobs to mean much.
@@ -74,11 +75,14 @@ def run_session(
     target: int,
     console: Console,
     now: Callable[[], datetime],
+    suggestions: Mapping[str, Suggestion] | None = None,
 ) -> None:
     """Offer jobs from `queue` until the eval set has `target` fit / not-fit labels or the user quits.
 
-    `labels` is updated in place with every answer, next to the line appended to `labels_path`.
+    `labels` is updated in place with every answer, next to the line appended to `labels_path`. A job with
+    a suggestion shows it: Enter accepts it with its reason, and y / n overrides it.
     """
+    suggestions = suggestions or {}
     index = 0
     while index < len(queue):
         counts = tally(labels)
@@ -90,9 +94,12 @@ def run_session(
         previous = labels.get(job.key)
         if previous is not None:
             console.write(f"Currently: {VERDICT_NAMES[previous.verdict]}. {previous.reason}".rstrip())
+        suggestion = suggestions.get(job.key)
+        if suggestion is not None:
+            console.write(f"Suggested: {VERDICT_NAMES[suggestion.verdict]}. {suggestion.reason}")
         console.write(progress_line(labels, target))
 
-        answer = _read(console, PROMPT)
+        answer = _read(console, SUGGESTED_PROMPT if suggestion else PROMPT)
         if answer is None or answer == "q":
             break
         if answer == "o":
@@ -104,17 +111,25 @@ def run_session(
             else:
                 index -= 1
             continue
-        verdict = ANSWERS.get(answer)
+        accepted = suggestion is not None and answer == ""
+        verdict = suggestion.verdict if suggestion is not None and accepted else ANSWERS.get(answer)
         if verdict is None:
             console.write(f"Unknown answer {answer!r}.")
             continue
         reason = ""
-        if verdict != "skip":
-            reason_answer = _read_reason(console)
+        if suggestion is not None and accepted:
+            reason = suggestion.reason
+        elif verdict != "skip":
+            # Picking the suggested verdict by key may keep its reason; disagreeing needs a reason of your own.
+            keep = suggestion.reason if suggestion is not None and suggestion.verdict == verdict else None
+            reason_answer = _read_reason(console, keep)
             if reason_answer is None:
                 break
             reason = reason_answer
-        label = Label(verdict=verdict, reason=reason, labeled_at=now(), job=job)
+        label = Label(
+            verdict=verdict, reason=reason, labeled_at=now(), job=job,
+            suggestion=suggestion.verdict if suggestion is not None else None,
+        )
         append_label(labels_path, label)
         labels[job.key] = label
         index += 1
@@ -127,6 +142,10 @@ def run_session(
 def summary(labels: Mapping[str, Label], target: int, labels_path: Path) -> str:
     counts = tally(labels)
     lines = [f"{progress_line(labels, target)}  saved in {labels_path}"]
+    reviewed = [label for label in labels.values() if label.suggestion is not None and label.counts]
+    if reviewed:
+        changed = sum(1 for label in reviewed if label.overrode_suggestion)
+        lines.append(f"Suggestions: {len(reviewed) - changed} accepted, {changed} changed.")
     if counts["fit"] + counts["no_fit"] >= target and counts["fit"] < MIN_FIT_LABELS:
         lines.append(
             f"Only {counts['fit']} jobs are labeled fit: recall will be noisy. "
@@ -143,12 +162,13 @@ def _read(console: Console, prompt: str) -> str | None:
         return None
 
 
-def _read_reason(console: Console) -> str | None:
+def _read_reason(console: Console, default: str | None = None) -> str | None:
+    prompt = "Why? (Enter keeps the suggested reason) > " if default else "Why? > "
     while True:
         try:
-            reason = console.read("Why? > ").strip()
+            reason = console.read(prompt).strip()
         except EOFError:
             return None
-        if reason:
-            return reason
+        if reason or default:
+            return reason or default
         console.write("A reason is required: it is what the filter and the priorities are built from.")

@@ -171,7 +171,8 @@ def test_v1_database_is_migrated_keeping_its_rows(tmp_path: Path) -> None:
     store.record_sightings([job("2").model_copy(update={"description_text": None})], T2)
     assert store.count() == 2
     store.close()
-    assert sqlite3.connect(path).execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION == 2
+    assert sqlite3.connect(path).execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION == 3
+    assert JobStore.open(path).get_extraction("greenhouse:acme:1", "x", "h") is None  # v3 table exists
 
 
 def alert_job(job_id: str) -> Job:
@@ -203,3 +204,20 @@ def test_sightings_read_out_of_order_keep_the_widest_seen_range(store: JobStore)
 
 def test_no_sightings_is_a_no_op(store: JobStore) -> None:
     assert store.record_sightings([], T1) == 0
+
+
+def test_extraction_round_trip_and_hash_mismatch_is_a_miss(store: JobStore) -> None:
+    store.save_extraction("greenhouse:acme:1", "gemini:m", "h1", '{"a": 1}', 900, 60, T1)
+    stored = store.get_extraction("greenhouse:acme:1", "gemini:m", "h1")
+    assert stored is not None
+    assert (stored.fields, stored.input_tokens, stored.output_tokens, stored.extracted_at) == ('{"a": 1}', 900, 60, T1)
+    assert store.get_extraction("greenhouse:acme:1", "gemini:m", "h2") is None
+    assert store.get_extraction("greenhouse:acme:1", "ollama:m", "h1") is None
+
+
+def test_saving_again_replaces_the_extractors_answer(store: JobStore) -> None:
+    store.save_extraction("greenhouse:acme:1", "gemini:m", "h1", '{"a": 1}', 900, 60, T1)
+    store.save_extraction("greenhouse:acme:1", "gemini:m", "h2", '{"a": 2}', None, None, T2)
+    assert store.get_extraction("greenhouse:acme:1", "gemini:m", "h1") is None
+    stored = store.get_extraction("greenhouse:acme:1", "gemini:m", "h2")
+    assert stored is not None and stored.fields == '{"a": 2}' and stored.input_tokens is None

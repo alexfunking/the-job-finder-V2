@@ -8,8 +8,8 @@ import pytest
 from fakes import FakePoster
 
 from jobfinder.cli import EXIT_BOARD_ERRORS, EXIT_CONFIG_ERROR, EXIT_OK, run_extract
-from jobfinder.extraction import Extraction, ExtractionError, ExtractionResult, build_extractor
-from jobfinder.extraction.base import MAX_DESCRIPTION_CHARS, SCHEMA, job_prompt, parse_extraction
+from jobfinder.extraction import CachedExtractor, Extraction, ExtractionError, ExtractionResult, build_extractor
+from jobfinder.extraction.base import MAX_DESCRIPTION_CHARS, SCHEMA, input_hash, job_prompt, parse_extraction
 from jobfinder.extraction.gemini import GeminiExtractor, answer_text
 from jobfinder.extraction.ollama import OllamaExtractor
 from jobfinder.http import FetchError
@@ -169,8 +169,10 @@ class ScriptedExtractor:
 
     def __init__(self, fail_on: str | None = None) -> None:
         self._fail_on = fail_on
+        self.asked: list[str] = []
 
     def extract(self, job: Job) -> ExtractionResult:
+        self.asked.append(job.job_id)
         if job.job_id == self._fail_on:
             raise ExtractionError("boom")
         return ExtractionResult(Extraction.model_validate(ANSWER), 100, 10)
@@ -190,8 +192,8 @@ def test_extract_prints_each_answer_and_token_totals(db: Path, capsys: pytest.Ca
     out = capsys.readouterr().out
     assert code == EXIT_OK
     assert out.count('"years_required": 2') == 2
-    assert "2 extracted, 0 failed" in out
-    assert "tokens: 200 in, 20 out" in out
+    assert "2 extracted (0 from saved answers), 0 failed" in out
+    assert "tokens spent: 200 in, 20 out" in out
 
 
 def test_extract_reports_failures_and_keeps_going(db: Path, capsys: pytest.CaptureFixture[str]) -> None:
@@ -199,10 +201,63 @@ def test_extract_reports_failures_and_keeps_going(db: Path, capsys: pytest.Captu
     out = capsys.readouterr().out
     assert code == EXIT_BOARD_ERRORS
     assert "ERROR boom" in out
-    assert "2 extracted, 1 failed" in out
+    assert "2 extracted (0 from saved answers), 1 failed" in out
 
 
 def test_extract_without_db_or_key_is_a_config_error(tmp_path: Path, db: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
     assert run_extract(tmp_path / "none.db", tmp_path / ".env", "gemini", None, 1, 1) == EXIT_CONFIG_ERROR
     assert run_extract(db, tmp_path / ".env", "gemini", None, 1, 1) == EXIT_CONFIG_ERROR
+
+
+def test_extract_rerun_uses_saved_answers_unless_told_not_to(db: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    run_extract(db, db.parent / ".env", "gemini", None, limit=3, seed=1, extractor=ScriptedExtractor())
+    capsys.readouterr()
+    again = ScriptedExtractor()
+    assert run_extract(db, db.parent / ".env", "gemini", None, limit=3, seed=1, extractor=again) == EXIT_OK
+    out = capsys.readouterr().out
+    assert again.asked == []
+    assert "3 extracted (3 from saved answers)" in out
+    assert "tokens spent: 0 in, 0 out" in out
+    fresh = ScriptedExtractor()
+    run_extract(db, db.parent / ".env", "gemini", None, limit=3, seed=1, extractor=fresh, use_cache=False)
+    assert len(fresh.asked) == 3
+
+
+# --- the cache ---------------------------------------------------------------------------------------
+
+
+T0 = datetime(2026, 10, 28, 12, tzinfo=UTC)
+
+
+def test_cache_asks_once_then_answers_from_the_store() -> None:
+    store = JobStore.open(":memory:")
+    inner = ScriptedExtractor()
+    cached = CachedExtractor(inner, store, lambda: T0)
+    first, second = cached.extract(job()), cached.extract(job())
+    assert inner.asked == ["1"]
+    assert (first.cached, second.cached) == (False, True)
+    assert second.extraction == first.extraction
+    assert (second.input_tokens, second.output_tokens) == (100, 10)
+    assert cached.name == "fake:model"
+
+
+def test_cache_misses_when_the_posting_changes() -> None:
+    store = JobStore.open(":memory:")
+    inner = ScriptedExtractor()
+    cached = CachedExtractor(inner, store, lambda: T0)
+    cached.extract(job())
+    edited = job(description="Now 5+ years.")
+    assert input_hash(edited) != input_hash(job())
+    assert cached.extract(edited).cached is False
+    assert inner.asked == ["1", "1"]
+
+
+def test_cache_does_not_save_failures() -> None:
+    store = JobStore.open(":memory:")
+    inner = ScriptedExtractor(fail_on="1")
+    cached = CachedExtractor(inner, store, lambda: T0)
+    for _ in range(2):
+        with pytest.raises(ExtractionError):
+            cached.extract(job())
+    assert inner.asked == ["1", "1"]

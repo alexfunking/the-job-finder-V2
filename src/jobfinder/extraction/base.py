@@ -8,6 +8,7 @@ eval set.
 
 from __future__ import annotations
 
+import hashlib
 import json
 from dataclasses import dataclass
 from typing import Annotated, Final, Protocol
@@ -57,6 +58,8 @@ class ExtractionResult:
     # Token counts as the provider reports them (thinking tokens count as output); None if not reported.
     input_tokens: int | None
     output_tokens: int | None
+    # True when the answer came from the store: the tokens are what it cost when it was first extracted.
+    cached: bool = False
 
 
 class Extractor(Protocol):
@@ -114,6 +117,12 @@ def job_prompt(job: Job) -> str:
             description = description[:MAX_DESCRIPTION_CHARS] + "\n[truncated]"
         lines.extend(["Description:", description])
     return "\n".join(lines)
+
+
+def input_hash(job: Job) -> str:
+    """Identifies everything a model is given for this job: a cached answer is reused only for the same."""
+    given = "\n".join([INSTRUCTIONS, json.dumps(SCHEMA, sort_keys=True), job_prompt(job)])
+    return hashlib.sha256(given.encode("utf-8")).hexdigest()
 
 
 def parse_extraction(text: str) -> Extraction:

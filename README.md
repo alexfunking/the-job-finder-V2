@@ -39,6 +39,8 @@ uv run jobfinder label
 ```
 Shows stored jobs one at a time; answer `y` (fit) or `n` (not fit) and say why, `s` to skip, `o` to open the posting, `b` to go back, `q` to quit. Every answer is saved at once to `data/labels.jsonl` (personal, not committed) with a full snapshot of the job, so a later session continues where you stopped and the eval set survives jobs closing. Stops at `--target` (default 80) fit / not-fit labels.
 
+If `data/suggestions.jsonl` exists (personal, not committed), jobs with a suggested label come first and show it: press Enter to accept the suggestion with its reason, or `y` / `n` to override it with your own reason. Each label records what was suggested, and the session ends with how many suggestions you accepted and changed.
+
 Jobs are offered in a fixed order (`--seed`) that keeps the eval set about 30% email-alert jobs (mostly junior, title only), 40% board jobs the pre-filter keeps, 20% Israel jobs the filter rejects and 10% jobs outside Israel. That way it has enough "fit" labels to measure recall, is not dominated by the obvious rejects, and still catches the filter's mistakes.
 
 ## Pre-filter
@@ -53,7 +55,7 @@ Drops jobs that are clearly out before the extractor sees them: the location mus
 uv run jobfinder extract                          # Gemini (GEMINI_API_KEY in .env), 5 jobs
 uv run jobfinder extract --extractor ollama --limit 10 --model qwen2.5:32b
 ```
-Runs an extractor on the first jobs of the labeling order and prints what it reads from each posting: `years_required`, `onsite_days`, `is_student`, `location` and `stack`, plus the token totals. Nothing is stored; this is for checking a model by eye. Both extractors get the same instructions and JSON schema (`src/jobfinder/extraction/base.py`), and only the public posting text is sent, never your priorities. A busy model (HTTP 503) or a per-minute quota (429) is retried after 5, 20 and 60 seconds.
+Runs an extractor on the first jobs of the labeling order and prints what it reads from each posting: `years_required`, `onsite_days`, `is_student`, `location` and `stack`, plus the tokens spent. Answers are saved in `data/jobs.db` (table `extractions`, one per job and extractor) and reused while the posting and the prompt stay the same, so a rerun costs nothing; `--no-cache` asks the model again. Both extractors get the same instructions and JSON schema (`src/jobfinder/extraction/base.py`), and only the public posting text is sent, never your priorities. A busy model (HTTP 503) or a per-minute quota (429) is retried after 5, 20 and 60 seconds.
 
 ## Find a company's board
 ```bash

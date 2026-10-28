@@ -1,4 +1,8 @@
-"""SQLite storage for collected jobs: one row per job key, with when it was first seen, last seen and closed."""
+"""SQLite storage for collected jobs: one row per job key, with when it was first seen, last seen and closed.
+
+It also caches what an extractor read from a job, as opaque JSON: the store does not know the fields, so
+the engine stays domain-generic.
+"""
 
 from __future__ import annotations
 
@@ -11,7 +15,7 @@ from typing import Final
 
 from jobfinder.models import Job
 
-SCHEMA_VERSION: Final = 2
+SCHEMA_VERSION: Final = 3
 
 _JOBS_TABLE: Final = """
 CREATE TABLE {name} (
@@ -33,6 +37,21 @@ CREATE TABLE {name} (
 """
 _INDEX: Final = "CREATE INDEX jobs_board ON jobs (source, slug);"
 
+# One answer per job and extractor. input_hash identifies the exact input the extractor was given (its
+# instructions and the job's text), so an edited posting or a changed prompt is a cache miss.
+_EXTRACTIONS_TABLE: Final = """
+CREATE TABLE extractions (
+    key           TEXT NOT NULL,
+    extractor     TEXT NOT NULL,
+    input_hash    TEXT NOT NULL,
+    fields        TEXT NOT NULL,
+    input_tokens  INTEGER,
+    output_tokens INTEGER,
+    extracted_at  TEXT NOT NULL,
+    PRIMARY KEY (key, extractor)
+);
+"""
+
 # v1 -> v2: description_text may be NULL (email alerts carry no description). SQLite cannot drop a
 # NOT NULL constraint in place, so the table is rebuilt and the rows copied.
 _MIGRATE_1_TO_2: Final = (
@@ -42,6 +61,10 @@ _MIGRATE_1_TO_2: Final = (
     + "ALTER TABLE jobs_v2 RENAME TO jobs;\n"
     + _INDEX
 )
+_MIGRATE_2_TO_3: Final = _EXTRACTIONS_TABLE
+# The script that takes a database from version N to N + 1.
+_MIGRATIONS: Final[dict[int, str]] = {1: _MIGRATE_1_TO_2, 2: _MIGRATE_2_TO_3}
+_CREATE: Final = _JOBS_TABLE.format(name="jobs") + _INDEX + _EXTRACTIONS_TABLE
 
 _JOB_COLUMNS: Final = (
     "source", "slug", "job_id", "company", "title", "location", "url",
@@ -55,6 +78,14 @@ class StoredJob:
     first_seen: datetime
     last_seen: datetime
     closed_at: datetime | None
+
+
+@dataclass(frozen=True, slots=True)
+class StoredExtraction:
+    fields: str  # JSON, as the extractor's model dumped it
+    input_tokens: int | None
+    output_tokens: int | None
+    extracted_at: datetime
 
 
 @dataclass(frozen=True, slots=True)
@@ -99,7 +130,10 @@ class JobStore:
             return
         if version > SCHEMA_VERSION:
             raise RuntimeError(f"database schema v{version} is newer than this code (v{SCHEMA_VERSION})")
-        script = _JOBS_TABLE.format(name="jobs") + _INDEX if version == 0 else _MIGRATE_1_TO_2
+        if version == 0:
+            script = _CREATE
+        else:
+            script = "".join(_MIGRATIONS[step] for step in range(version, SCHEMA_VERSION))
         # executescript commits on its own, so the whole migration is wrapped in one explicit transaction.
         self._db.executescript(f"BEGIN;\n{script}\nPRAGMA user_version = {SCHEMA_VERSION};\nCOMMIT;")
 
@@ -190,6 +224,45 @@ class JobStore:
         where = "" if include_closed else " WHERE closed_at IS NULL"
         result: int = self._db.execute(f"SELECT COUNT(*) FROM jobs{where}").fetchone()[0]
         return result
+
+    def get_extraction(self, key: str, extractor: str, input_hash: str) -> StoredExtraction | None:
+        """The cached answer of `extractor` for this job, if it was given exactly this input."""
+        row = self._db.execute(
+            "SELECT * FROM extractions WHERE key = ? AND extractor = ? AND input_hash = ?",
+            (key, extractor, input_hash),
+        ).fetchone()
+        if row is None:
+            return None
+        return StoredExtraction(
+            fields=row["fields"],
+            input_tokens=row["input_tokens"],
+            output_tokens=row["output_tokens"],
+            extracted_at=_from_db_time(row["extracted_at"]),
+        )
+
+    def save_extraction(
+        self,
+        key: str,
+        extractor: str,
+        input_hash: str,
+        fields: str,
+        input_tokens: int | None,
+        output_tokens: int | None,
+        extracted_at: datetime,
+    ) -> None:
+        """Store an answer, replacing any earlier one by the same extractor for this job."""
+        with self._db:
+            self._db.execute(
+                """
+                INSERT INTO extractions (key, extractor, input_hash, fields, input_tokens, output_tokens, extracted_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT (key, extractor) DO UPDATE SET
+                    input_hash = excluded.input_hash, fields = excluded.fields,
+                    input_tokens = excluded.input_tokens, output_tokens = excluded.output_tokens,
+                    extracted_at = excluded.extracted_at
+                """,
+                (key, extractor, input_hash, fields, input_tokens, output_tokens, _to_db_time(extracted_at)),
+            )
 
     @staticmethod
     def _job_values(job: Job) -> tuple[str | None, ...]:

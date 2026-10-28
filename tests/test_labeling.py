@@ -4,8 +4,10 @@ from collections.abc import Iterable
 from datetime import UTC, datetime
 from pathlib import Path
 
+import pytest
+
 from jobfinder.labeling import Console, render_job, run_session
-from jobfinder.labels import Label, load_labels
+from jobfinder.labels import Label, Suggestion, load_labels, load_suggestions
 from jobfinder.models import Job
 
 T1 = datetime(2026, 10, 26, 8, 0, tzinfo=UTC)
@@ -131,3 +133,62 @@ def test_render_job_wraps_the_description_and_indents_list_items() -> None:
     first_item = lines.index(next(line for line in lines if line.startswith("- word")))
     assert lines[first_item + 1].startswith("  word")
     assert "" in lines  # blank lines between paragraphs are kept
+
+
+def suggest(job_id: str, verdict: str, reason: str) -> Suggestion:
+    return Suggestion.model_validate({"key": job(job_id).key, "verdict": verdict, "reason": reason})
+
+
+def run_suggested(
+    answers: Iterable[str], jobs: list[Job], tmp_path: Path, suggestions: list[Suggestion]
+) -> tuple[dict[str, Label], ScriptedConsole]:
+    labels: dict[str, Label] = {}
+    scripted = ScriptedConsole(answers)
+    by_key = {s.key: s for s in suggestions}
+    run_session(jobs, labels, tmp_path / "labels.jsonl", 80, scripted.console(), lambda: T1, by_key)
+    return labels, scripted
+
+
+def test_enter_accepts_the_suggestion_with_its_reason(tmp_path: Path) -> None:
+    labels, scripted = run_suggested([""], [job("1")], tmp_path, [suggest("1", "fit", "student role, Python")])
+    label = labels[job("1").key]
+    assert (label.verdict, label.reason, label.suggestion) == ("fit", "student role, Python", "fit")
+    assert not label.overrode_suggestion
+    assert "Suggested: fit. student role, Python" in scripted.text
+    assert "Suggestions: 1 accepted, 0 changed." in scripted.text
+
+
+def test_overriding_a_suggestion_needs_a_reason_of_your_own(tmp_path: Path) -> None:
+    labels, scripted = run_suggested(
+        ["n", "", "too far for me"], [job("1")], tmp_path, [suggest("1", "fit", "student role")]
+    )
+    label = labels[job("1").key]
+    assert (label.verdict, label.reason, label.suggestion) == ("no_fit", "too far for me", "fit")
+    assert label.overrode_suggestion
+    assert "A reason is required" in scripted.text
+    assert "Suggestions: 0 accepted, 1 changed." in scripted.text
+
+
+def test_picking_the_suggested_verdict_by_key_can_keep_its_reason(tmp_path: Path) -> None:
+    labels, _ = run_suggested(["n", ""], [job("1")], tmp_path, [suggest("1", "no_fit", "needs 5 years")])
+    assert labels[job("1").key].reason == "needs 5 years"
+
+
+def test_jobs_without_a_suggestion_work_as_before(tmp_path: Path) -> None:
+    labels, scripted = run_suggested(["", "y", "ok"], [job("1")], tmp_path, [suggest("2", "fit", "x")])
+    assert "Unknown answer ''" in scripted.text
+    assert labels[job("1").key].suggestion is None
+    assert load_labels(tmp_path / "labels.jsonl")[job("1").key].suggestion is None
+
+
+def test_load_suggestions_reads_the_last_line_per_key_and_rejects_bad_lines(tmp_path: Path) -> None:
+    path = tmp_path / "suggestions.jsonl"
+    assert load_suggestions(path) == {}
+    path.write_text(
+        suggest("1", "fit", "a").model_dump_json() + "\n\n" + suggest("1", "no_fit", "b").model_dump_json() + "\n",
+        encoding="utf-8",
+    )
+    assert load_suggestions(path)[job("1").key].verdict == "no_fit"
+    path.write_text('{"key": "k", "verdict": "skip", "reason": "x"}\n', encoding="utf-8")
+    with pytest.raises(ValueError, match="suggestions.jsonl:1"):
+        load_suggestions(path)
