@@ -8,7 +8,7 @@ Design and ADRs: `C:\Users\alex0\Vault\02_Projects\Job Finder\Job Finder - Archi
 ## Where we are
 **Phase 2 (measurable scoring), steps 1–2 of 7, plus a new source: LinkedIn job alerts by email.** The labeling tool, the deterministic pre-filter and `jobfinder alerts` are built; the hand-labeled eval set does not exist yet (`data/labels.jsonl` is missing), so the filter is not measured yet.
 
-Repo: https://github.com/alexfunking/the-job-finder-V2 (public), `main` tracks `origin/main` and is pushed up to `8a6425d`. Branch `chore/daily-scan-and-docs` adds the daily scheduled run (not merged yet; check `git status -sb`). 243 tests pass, `mypy --strict` clean.
+Repo: https://github.com/alexfunking/the-job-finder-V2 (public), `main` tracks `origin/main` and is pushed up to `1794dd5` (the daily scheduled run); check `git status -sb`. 243 tests pass, `mypy --strict` clean.
 
 **Daily run (since 2026-10-28):** Windows Task Scheduler task `job-finder daily scan` runs `scripts/daily.cmd` at 08:00 (or as soon as possible after a missed start): `jobfinder scan`, then `jobfinder alerts --days 3`. Output is appended to `data/logs/daily.log` (gitignored). Check that log to verify closing / reopening across days.
 
