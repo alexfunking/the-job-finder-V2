@@ -57,6 +57,15 @@ uv run jobfinder extract --extractor ollama --limit 10 --model qwen2.5:32b
 ```
 Runs an extractor on the first jobs of the labeling order and prints what it reads from each posting: `years_required`, `onsite_days`, `is_student`, `location` and `stack`, plus the tokens spent. Answers are saved in `data/jobs.db` (table `extractions`, one per job and extractor) and reused while the posting and the prompt stay the same, so a rerun costs nothing; `--no-cache` asks the model again. Both extractors get the same instructions and JSON schema (`src/jobfinder/extraction/base.py`), and only the public posting text is sent, never your priorities. A busy model (HTTP 503) or a per-minute quota (429) is retried after 5, 20 and 60 seconds.
 
+## See the matches
+```bash
+uv run jobfinder extract --all --extractor ollama   # read every job the filter keeps (cached; rerun is free)
+uv run jobfinder ui                                  # opens http://127.0.0.1:8765/
+```
+Scores every open job the pre-filter keeps against `priorities.txt` (personal, not committed) and shows them in a local web page, in three tabs: **Match**, **Maybe** (nothing rules it out, but the level is unknown: no junior / student in the title and no years stated) and **No**. Each job shows its score out of 100 and why: level (40), field (30), location (20) and days in the office (10). A job the extractor has not read yet is scored from its title and location. The page reads the database on every reload, listens on 127.0.0.1 only, and changes nothing.
+
+`priorities.txt` is TOML with `[profile] skills`, `[role] max_years / entry_title_words / field_title_words / reject_title_words`, `[location] accept / low_priority / reject`, `[onsite] preferred_max_days` and `[score] match_threshold`.
+
 ## Find a company's board
 ```bash
 uv run python tools/ats_probe.py data/companies.csv --out data/ats_map.csv

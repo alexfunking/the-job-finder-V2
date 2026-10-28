@@ -240,6 +240,21 @@ class JobStore:
             extracted_at=_from_db_time(row["extracted_at"]),
         )
 
+    def extractions_for(self, key: str, input_hash: str) -> dict[str, StoredExtraction]:
+        """Every extractor's cached answer for this job that was given exactly this input, by extractor."""
+        rows = self._db.execute(
+            "SELECT * FROM extractions WHERE key = ? AND input_hash = ? ORDER BY extractor", (key, input_hash)
+        )
+        return {
+            row["extractor"]: StoredExtraction(
+                fields=row["fields"],
+                input_tokens=row["input_tokens"],
+                output_tokens=row["output_tokens"],
+                extracted_at=_from_db_time(row["extracted_at"]),
+            )
+            for row in rows
+        }
+
     def save_extraction(
         self,
         key: str,

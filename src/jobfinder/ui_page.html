@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Job Matches</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --panel: #ffffff; --text: #1d2330; --muted: #5d6677; --line: #e3e6ec;
+    --accent: #2f6fde; --match: #1f8a4c; --match-bg: #e5f5ec; --maybe: #a86500; --maybe-bg: #fdf1dc;
+    --no: #b3363b; --no-bg: #fbe6e7; --chip: #eef1f6;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #12151b; --panel: #1b2029; --text: #e6e9ef; --muted: #98a1b2; --line: #2b323e;
+      --accent: #6b9cff; --match: #4cc07f; --match-bg: #173326; --maybe: #e2a54a; --maybe-bg: #392b14;
+      --no: #f07b80; --no-bg: #3a1c1f; --chip: #252c38;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  header { position: sticky; top: 0; z-index: 2; background: var(--panel); border-bottom: 1px solid var(--line); }
+  .bar { max-width: 1100px; margin: 0 auto; padding: 14px 16px; display: flex; flex-wrap: wrap; gap: 10px 16px;
+         align-items: center; }
+  h1 { font-size: 18px; margin: 0; margin-right: auto; }
+  .meta { color: var(--muted); font-size: 13px; }
+  .tabs { display: flex; gap: 6px; }
+  .tab { border: 1px solid var(--line); background: transparent; color: var(--text); border-radius: 999px;
+         padding: 5px 12px; cursor: pointer; font: inherit; font-size: 14px; }
+  .tab[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .controls { max-width: 1100px; margin: 0 auto; padding: 0 16px 12px; display: flex; flex-wrap: wrap; gap: 10px;
+              align-items: center; }
+  input[type=search] { flex: 1 1 240px; min-width: 0; padding: 7px 10px; border-radius: 8px;
+                       border: 1px solid var(--line); background: var(--bg); color: var(--text); font: inherit; }
+  label.check { display: flex; gap: 6px; align-items: center; color: var(--muted); font-size: 14px; }
+  main { max-width: 1100px; margin: 0 auto; padding: 16px; display: grid; gap: 10px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px;
+          display: grid; grid-template-columns: 56px 1fr; gap: 12px; }
+  .score { width: 56px; height: 56px; border-radius: 12px; display: grid; place-items: center;
+           font-weight: 700; font-size: 18px; }
+  .score.match { background: var(--match-bg); color: var(--match); }
+  .score.maybe { background: var(--maybe-bg); color: var(--maybe); }
+  .score.no { background: var(--no-bg); color: var(--no); }
+  .title { font-weight: 600; font-size: 16px; color: var(--text); text-decoration: none; }
+  .title:hover { color: var(--accent); text-decoration: underline; }
+  .sub { color: var(--muted); font-size: 14px; margin-top: 2px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .chip { background: var(--chip); border-radius: 6px; padding: 2px 8px; font-size: 13px; }
+  .chip.bad { background: var(--no-bg); color: var(--no); }
+  .chip.tag { background: transparent; border: 1px solid var(--line); color: var(--muted); }
+  .chip.fit { background: var(--match-bg); color: var(--match); }
+  .chip.nofit { background: var(--no-bg); color: var(--no); }
+  details { margin-top: 8px; font-size: 13px; color: var(--muted); }
+  details pre { white-space: pre-wrap; margin: 6px 0 0; font-size: 12px; }
+  .empty { text-align: center; color: var(--muted); padding: 40px 0; }
+  @media (max-width: 560px) {
+    .card { grid-template-columns: 44px 1fr; gap: 10px; }
+    .score { width: 44px; height: 44px; font-size: 15px; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="bar">
+    <h1>Job Matches</h1>
+    <div class="tabs" role="group" aria-label="Verdict">
+      <button class="tab" data-verdict="match" aria-pressed="true">Match <span data-count="match"></span></button>
+      <button class="tab" data-verdict="maybe" aria-pressed="false">Maybe <span data-count="maybe"></span></button>
+      <button class="tab" data-verdict="no" aria-pressed="false">No <span data-count="no"></span></button>
+    </div>
+  </div>
+  <div class="controls">
+    <input type="search" id="q" placeholder="Search title, company, location" aria-label="Search">
+    <label class="check"><input type="checkbox" id="recent"> New in the last 7 days</label>
+    <label class="check"><input type="checkbox" id="unlabeled"> Not labeled yet</label>
+    <span class="meta" id="meta"></span>
+  </div>
+</header>
+<main id="list"></main>
+<script id="data" type="application/json">__DATA__</script>
+<script>
+const data = JSON.parse(document.getElementById("data").textContent);
+let verdict = "match";
+const list = document.getElementById("list");
+const q = document.getElementById("q");
+const recent = document.getElementById("recent");
+const unlabeled = document.getElementById("unlabeled");
+
+for (const [name, count] of Object.entries(data.counts)) {
+  document.querySelector(`[data-count="${name}"]`).textContent = `(${count})`;
+}
+document.getElementById("meta").textContent =
+  `${data.rows.length} jobs scored, ${data.extracted} read by an extractor - ${data.generated_at}`;
+
+function el(tag, cls, text) {
+  const node = document.createElement(tag);
+  if (cls) node.className = cls;
+  if (text !== undefined) node.textContent = text;
+  return node;
+}
+
+function card(row) {
+  const box = el("article", "card");
+  box.append(el("div", `score ${row.verdict}`, String(row.points)));
+  const body = el("div");
+  const link = el("a", "title", row.title);
+  link.href = row.url; link.target = "_blank"; link.rel = "noopener noreferrer";
+  body.append(link);
+  const seen = row.first_seen.slice(0, 10);
+  body.append(el("div", "sub", `${row.company} · ${row.location || "no location"} · first seen ${seen}`));
+  const chips = el("div", "chips");
+  for (const reason of row.reasons) chips.append(el("span", "chip", reason));
+  for (const reason of row.rejections) chips.append(el("span", "chip bad", reason));
+  if (row.title_only) chips.append(el("span", "chip tag", "title only (email alert)"));
+  if (row.extractor) chips.append(el("span", "chip tag", `read by ${row.extractor}`));
+  if (row.label) {
+    const fit = row.label.verdict === "fit";
+    const text = row.label.verdict === "skip" ? "you skipped it" : `you said ${fit ? "fit" : "not fit"}: ${row.label.reason}`;
+    chips.append(el("span", `chip ${fit ? "fit" : "nofit"}`, text));
+  }
+  body.append(chips);
+  if (row.extraction) {
+    const more = el("details");
+    more.append(el("summary", null, "What the extractor read"));
+    more.append(el("pre", null, JSON.stringify(row.extraction, null, 2)));
+    body.append(more);
+  }
+  box.append(body);
+  return box;
+}
+
+function render() {
+  const needle = q.value.trim().toLowerCase();
+  const since = Date.now() - 7 * 24 * 3600 * 1000;
+  const shown = data.rows.filter(row =>
+    row.verdict === verdict &&
+    (!needle || `${row.title} ${row.company} ${row.location}`.toLowerCase().includes(needle)) &&
+    (!recent.checked || Date.parse(row.first_seen) >= since) &&
+    (!unlabeled.checked || !row.label));
+  list.replaceChildren(...(shown.length ? shown.map(card) : [el("p", "empty", "No jobs here.")]));
+}
+
+for (const tab of document.querySelectorAll(".tab")) {
+  tab.addEventListener("click", () => {
+    verdict = tab.dataset.verdict;
+    for (const other of document.querySelectorAll(".tab")) other.setAttribute("aria-pressed", String(other === tab));
+    render();
+  });
+}
+for (const input of [q, recent, unlabeled]) input.addEventListener("input", render);
+render();
+</script>
+</body>
+</html>

@@ -1,4 +1,4 @@
-"""Command line entry point: `jobfinder scan`, `alerts`, `label`, `filter` and `extract`."""
+"""Command line entry point: `jobfinder scan`, `alerts`, `label`, `filter`, `extract` and `ui`."""
 
 from __future__ import annotations
 
@@ -24,6 +24,7 @@ from jobfinder.mailbox import ImapMailbox, Mailbox, MailboxError
 from jobfinder.models import Job
 from jobfinder.sampling import labeling_queue
 from jobfinder.scan import BoardOutcome, ScanReport, scan
+from jobfinder.scoring import PrioritiesError, load_priorities
 from jobfinder.storage import JobStore
 
 EXIT_OK = 0
@@ -254,9 +255,12 @@ def run_extract(
     seed: int,
     extractor: Extractor | None = None,
     use_cache: bool = True,
+    all_kept: bool = False,
 ) -> int:
     """Run an extractor on the first `limit` jobs of the labeling order and print what it reads.
 
+    With `all_kept`, run it instead on every open job the pre-filter keeps that has a description (a
+    title-only alert gives a model nothing more to read), which is what `jobfinder ui` scores.
     Answers are saved in the job store and reused while the job's text and the prompt stay the same, so
     a rerun costs nothing; `use_cache=False` asks the model again (and overwrites the saved answer).
     """
@@ -274,7 +278,11 @@ def run_extract(
         candidates = [stored.job for stored in store.open_jobs()]
         if use_cache:
             extractor = CachedExtractor(extractor, store, lambda: datetime.now(tz=UTC))
-        return _print_extractions(extractor, labeling_queue(candidates, {}, seed)[:limit])
+        if all_kept:
+            jobs = [job for job in candidates if job.description_text is not None and prefilter(job).kept]
+        else:
+            jobs = labeling_queue(candidates, {}, seed)[:limit]
+        return _print_extractions(extractor, jobs)
     finally:
         store.close()
 
@@ -308,6 +316,29 @@ def _print_extractions(extractor: Extractor, jobs: Sequence[Job]) -> int:
     return EXIT_BOARD_ERRORS if failed else EXIT_OK
 
 
+def run_ui(
+    db_path: Path, labels_path: Path, priorities_path: Path, prefer: Sequence[str], port: int, open_browser: bool
+) -> int:
+    if not db_path.exists():
+        print(f"no job database at {db_path}: run `jobfinder scan` first", file=sys.stderr)
+        return EXIT_CONFIG_ERROR
+    try:
+        load_priorities(priorities_path)
+        load_labels(labels_path)
+    except (PrioritiesError, ValueError) as exc:
+        print(exc, file=sys.stderr)
+        return EXIT_CONFIG_ERROR
+    # Imported here so the other commands do not load the web server.
+    from jobfinder.ui import serve
+
+    try:
+        serve(db_path, labels_path, priorities_path, prefer, port, open_browser)
+    except OSError as exc:
+        print(f"cannot listen on port {port}: {exc}", file=sys.stderr)
+        return EXIT_CONFIG_ERROR
+    return EXIT_OK
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="jobfinder", description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
@@ -338,6 +369,19 @@ def main(argv: Sequence[str] | None = None) -> int:
     extract_parser.add_argument("--limit", type=int, default=5, help="how many jobs to run on")
     extract_parser.add_argument("--seed", type=int, default=2026, help="same job order as `jobfinder label`")
     extract_parser.add_argument("--no-cache", action="store_true", help="ask the model again, ignoring saved answers")
+    extract_parser.add_argument(
+        "--all", action="store_true", help="every job the pre-filter keeps that has a description (ignores --limit)"
+    )
+    ui_parser = commands.add_parser("ui", help="show the scored jobs in a local web page")
+    ui_parser.add_argument("--db", type=Path, default=Path("data/jobs.db"))
+    ui_parser.add_argument("--labels", type=Path, default=Path("data/labels.jsonl"))
+    ui_parser.add_argument("--priorities", type=Path, default=Path("priorities.txt"))
+    ui_parser.add_argument(
+        "--prefer", action="append", default=[],
+        help="extractor name to use first when several read a job, e.g. gemini:gemini-3.5-flash (repeatable)",
+    )
+    ui_parser.add_argument("--port", type=int, default=8765)
+    ui_parser.add_argument("--no-browser", action="store_true", help="do not open the page in a browser")
     args = parser.parse_args(argv)
     if args.command == "scan":
         return run_scan(args.sources, args.db)
@@ -349,8 +393,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         return run_filter(args.db, args.labels, args.show)
     if args.command == "extract":
         return run_extract(
-            args.db, args.env, args.extractor, args.model, args.limit, args.seed, use_cache=not args.no_cache
+            args.db, args.env, args.extractor, args.model, args.limit, args.seed, use_cache=not args.no_cache,
+            all_kept=args.all,
         )
+    if args.command == "ui":
+        return run_ui(args.db, args.labels, args.priorities, args.prefer, args.port, not args.no_browser)
     parser.error(f"unknown command {args.command!r}")
 
 

@@ -261,3 +261,17 @@ def test_cache_does_not_save_failures() -> None:
         with pytest.raises(ExtractionError):
             cached.extract(job())
     assert inner.asked == ["1", "1"]
+
+
+def test_extract_all_runs_on_every_kept_job_with_a_description(tmp_path: Path) -> None:
+    path = tmp_path / "jobs.db"
+    store = JobStore.open(path)
+    seen = datetime(2026, 10, 28, tzinfo=UTC)
+    senior = job("2").model_copy(update={"title": "Senior Backend Engineer"})
+    store.record_board("greenhouse", "acme", [job("1"), senior], seen)
+    alert = job("3", description=None).model_copy(update={"source": "linkedin", "slug": "alerts"})
+    store.record_sightings([alert], seen)
+    store.close()
+    scripted = ScriptedExtractor()
+    assert run_extract(path, tmp_path / ".env", "gemini", None, 0, 1, extractor=scripted, all_kept=True) == EXIT_OK
+    assert scripted.asked == ["1"]
