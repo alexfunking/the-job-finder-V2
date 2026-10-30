@@ -2,8 +2,8 @@
 
 Last updated: 2026-10-28. Update this file at the end of every working session.
 
-Source of truth for the plan: Obsidian vault `C:\Users\alex0\Vault\02_Projects\Jarvis\Jarvis - Roadmap.md`.
-Design and ADRs: `C:\Users\alex0\Vault\02_Projects\Job Finder\Job Finder - Architecture.md` (ADR-001 to ADR-007).
+Source of truth for the plan: Obsidian vault `~/Vault/02_Projects/Jarvis/Jarvis - Roadmap.md`.
+Design and ADRs: `~/Vault/02_Projects/Job Finder/Job Finder - Architecture.md` (ADR-001 to ADR-007).
 
 ## Where we are
 **Phase 2 (measurable scoring), steps 1–4 of 7, plus a new source: LinkedIn job alerts by email.** The labeling tool, the deterministic pre-filter, `jobfinder alerts` and the extractors (Gemini and Ollama, `jobfinder extract`) are built; the hand-labeled eval set is in progress (the user started labeling on 2026-10-28), so nothing is measured yet.
