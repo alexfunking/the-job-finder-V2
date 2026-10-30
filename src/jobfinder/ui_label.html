@@ -1,0 +1,267 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Label Jobs</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --panel: #ffffff; --text: #1d2330; --muted: #5d6677; --line: #e3e6ec;
+    --accent: #2f6fde; --fit: #1f8a4c; --fit-bg: #e5f5ec; --no: #b3363b; --no-bg: #fbe6e7; --chip: #eef1f6;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #12151b; --panel: #1b2029; --text: #e6e9ef; --muted: #98a1b2; --line: #2b323e;
+      --accent: #6b9cff; --fit: #4cc07f; --fit-bg: #173326; --no: #f07b80; --no-bg: #3a1c1f; --chip: #252c38;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  header { position: sticky; top: 0; z-index: 2; background: var(--panel); border-bottom: 1px solid var(--line); }
+  .bar { max-width: 820px; margin: 0 auto; padding: 12px 16px 10px; display: flex; flex-wrap: wrap; gap: 6px 14px;
+         align-items: baseline; }
+  h1 { font-size: 18px; margin: 0; }
+  .bar a { margin-left: auto; color: var(--accent); font-size: 14px; }
+  #stats { color: var(--muted); font-size: 14px; }
+  .track { height: 4px; background: var(--line); }
+  #fill { height: 100%; width: 0; background: var(--accent); transition: width .2s; }
+  main { max-width: 820px; margin: 0 auto; padding: 16px; display: grid; gap: 12px; }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; }
+  h2 { font-size: 20px; margin: 0; line-height: 1.3; }
+  .sub { color: var(--muted); margin-top: 2px; }
+  #open { display: inline-block; margin-top: 6px; color: var(--accent); font-size: 14px; }
+  #suggestion { border-left: 4px solid var(--line); }
+  #suggestion.fit { border-left-color: var(--fit); }
+  #suggestion.no_fit { border-left-color: var(--no); }
+  #suggestion b.fit { color: var(--fit); }
+  #suggestion b.no_fit { color: var(--no); }
+  #previous { color: var(--muted); font-size: 14px; margin-top: 4px; }
+  #reasonbox { display: grid; gap: 8px; }
+  #reasonbox label { font-weight: 600; }
+  #reason { width: 100%; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg);
+            color: var(--text); font: inherit; }
+  .quick { display: flex; flex-wrap: wrap; gap: 6px; }
+  .quick button { border: 1px solid var(--line); background: var(--chip); color: var(--text); border-radius: 6px;
+                  padding: 3px 9px; font: inherit; font-size: 13px; cursor: pointer; }
+  .actions { display: flex; flex-wrap: wrap; gap: 8px; }
+  .actions button { border: 1px solid var(--line); background: var(--panel); color: var(--text); border-radius: 8px;
+                    padding: 9px 14px; font: inherit; cursor: pointer; }
+  .actions button:disabled { opacity: .5; cursor: default; }
+  #accept { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+  #fit { background: var(--fit-bg); color: var(--fit); }
+  #nofit { background: var(--no-bg); color: var(--no); }
+  kbd { font: 12px ui-monospace, Consolas, monospace; opacity: .75; margin-left: 4px; }
+  #error { color: var(--no); font-weight: 600; }
+  #description { white-space: pre-wrap; overflow-wrap: anywhere; }
+  .hidden { display: none !important; }
+  footer { position: sticky; bottom: 0; background: var(--panel); border-top: 1px solid var(--line); }
+  footer .inner { max-width: 820px; margin: 0 auto; padding: 10px 16px; display: grid; gap: 8px; }
+</style>
+</head>
+<body>
+<header>
+  <div class="bar">
+    <h1>Label Jobs</h1>
+    <span id="stats"></span>
+    <a href="/">Job matches</a>
+  </div>
+  <div class="track"><div id="fill"></div></div>
+</header>
+<main>
+  <section id="job" class="panel hidden">
+    <h2 id="title"></h2>
+    <div class="sub" id="where"></div>
+    <a id="open" target="_blank" rel="noopener noreferrer">Open the posting</a>
+    <div id="previous" class="hidden"></div>
+  </section>
+  <section id="suggestion" class="panel hidden"></section>
+  <section id="body" class="panel hidden"><div id="description"></div></section>
+  <section id="done" class="panel hidden"></section>
+</main>
+<footer id="controls" class="hidden">
+  <div class="inner">
+    <div id="error" class="hidden" role="alert"></div>
+    <form id="reasonbox" class="hidden">
+      <label for="reason" id="reasonlabel">Why?</label>
+      <input id="reason" autocomplete="off" maxlength="500">
+      <div class="quick" id="quick"></div>
+      <div class="actions">
+        <button type="submit" id="save">Save<kbd>Enter</kbd></button>
+        <button type="button" id="cancel">Cancel<kbd>Esc</kbd></button>
+      </div>
+    </form>
+    <div class="actions" id="choices">
+      <button type="button" id="accept">Accept suggestion<kbd>Enter</kbd></button>
+      <button type="button" id="fit">Fit<kbd>Y</kbd></button>
+      <button type="button" id="nofit">Not fit<kbd>N</kbd></button>
+      <button type="button" id="skip">Skip<kbd>S</kbd></button>
+      <button type="button" id="back">Back<kbd>B</kbd></button>
+      <button type="button" id="openkey">Open<kbd>O</kbd></button>
+    </div>
+  </div>
+</footer>
+<script>
+const TOKEN = "__TOKEN__";
+const QUICK = {
+  fit: ["Student role", "Junior, my field", "Asks 0-1 years", "Close to home"],
+  no_fit: ["Too many years", "Too senior", "Not my field", "Too far", "Needs a finished degree"],
+};
+const $ = id => document.getElementById(id);
+let items = [], index = 0, stats = null, pending = null, saving = false;
+const answers = new Map();
+
+function show(node, visible) { node.classList.toggle("hidden", !visible); }
+
+function bar() {
+  const left = items.slice(index).filter(item => item.suggestion && !answers.has(item.key)).length;
+  const fitNote = stats.fit < stats.min_fit ? ` (${stats.min_fit} needed)` : "";
+  const reviewed = left ? `${left} suggestions left` : "no suggestions left";
+  $("stats").textContent = `${stats.done} labeled · ${stats.fit} fit${fitNote} · ${stats.no_fit} not fit · ${reviewed}`;
+  const total = stats.done + left;
+  $("fill").style.width = total ? `${100 * stats.done / total}%` : "0";
+}
+
+function render() {
+  closeReason();
+  document.activeElement?.blur();  // a clicked button keeps focus, and Enter would press it again
+  $("error").textContent = "";
+  show($("error"), false);
+  const item = items[index];
+  for (const id of ["job", "body", "controls"]) show($(id), Boolean(item));
+  show($("done"), !item);
+  if (!item) {
+    show($("suggestion"), false);
+    $("done").textContent = stats.done
+      ? `Nothing left in this batch: ${stats.done} labeled, ${stats.fit} fit. You accepted ${stats.accepted} suggestions and changed ${stats.changed}. Reload for more jobs.`
+      : "No jobs to label.";
+    bar();
+    return;
+  }
+  $("title").textContent = item.title;
+  $("where").textContent = `${item.company} · ${item.location || "no location"}`;
+  $("open").href = item.url;
+  const answer = answers.get(item.key);
+  show($("previous"), Boolean(answer));
+  if (answer) {
+    const name = { fit: "fit", no_fit: "not fit", skip: "skipped" }[answer.verdict];
+    $("previous").textContent = `Your answer: ${name}${answer.reason ? ". " + answer.reason : ""}. Answer again to change it.`;
+  }
+  const box = $("suggestion");
+  box.className = "panel";
+  show(box, Boolean(item.suggestion));
+  box.replaceChildren();
+  if (item.suggestion) {
+    const fit = item.suggestion.verdict === "fit";
+    box.classList.add(item.suggestion.verdict);
+    const name = document.createElement("b");
+    name.className = item.suggestion.verdict;
+    name.textContent = `Suggested: ${fit ? "fit" : "not fit"}. `;
+    box.append(name, document.createTextNode(item.suggestion.reason));
+  }
+  $("accept").disabled = !item.suggestion;
+  $("back").disabled = index === 0;
+  $("description").textContent = item.description
+    || "No description: this job came from an email alert. Open the posting to read it.";
+  window.scrollTo(0, 0);
+  bar();
+}
+
+function openReason(verdict) {
+  pending = verdict;
+  $("reasonlabel").textContent = `Why ${verdict === "fit" ? "fit" : "not fit"}?`;
+  $("reason").value = "";
+  const quick = $("quick");
+  quick.replaceChildren(...QUICK[verdict].map(text => {
+    const chip = document.createElement("button");
+    chip.type = "button";
+    chip.textContent = text;
+    chip.addEventListener("click", () => save(verdict, text));
+    return chip;
+  }));
+  show($("reasonbox"), true);
+  show($("choices"), false);
+  $("reason").focus();
+}
+
+function closeReason() {
+  pending = null;
+  show($("reasonbox"), false);
+  show($("choices"), true);
+}
+
+function choose(verdict) {
+  const item = items[index];
+  if (!item || saving) return;
+  if (verdict === "skip" || item.suggestion?.verdict === verdict) save(verdict, "");
+  else openReason(verdict);
+}
+
+async function save(verdict, reason) {
+  const item = items[index];
+  if (saving) return;
+  saving = true;
+  try {
+    const response = await fetch("/api/label", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Label-Token": TOKEN },
+      body: JSON.stringify({ key: item.key, verdict, reason }),
+    });
+    if (!response.ok) throw new Error(await response.text());
+    stats = await response.json();
+    const kept = reason || (item.suggestion?.verdict === verdict ? item.suggestion.reason : "");
+    answers.set(item.key, { verdict, reason: kept });
+    index += 1;
+    render();
+  } catch (error) {
+    $("error").textContent = `Not saved: ${error.message}`;
+    show($("error"), true);
+  } finally {
+    saving = false;
+  }
+}
+
+$("accept").addEventListener("click", () => { const s = items[index]?.suggestion; if (s) choose(s.verdict); });
+$("fit").addEventListener("click", () => choose("fit"));
+$("nofit").addEventListener("click", () => choose("no_fit"));
+$("skip").addEventListener("click", () => choose("skip"));
+$("back").addEventListener("click", goBack);
+$("openkey").addEventListener("click", () => window.open(items[index].url, "_blank", "noopener"));
+$("cancel").addEventListener("click", closeReason);
+$("reasonbox").addEventListener("submit", event => {
+  event.preventDefault();
+  const reason = $("reason").value.trim();
+  if (reason) save(pending, reason);
+  else { $("error").textContent = "A reason is required."; show($("error"), true); }
+});
+
+function goBack() { if (index > 0) { index -= 1; render(); } }
+
+document.addEventListener("keydown", event => {
+  if (event.ctrlKey || event.metaKey || event.altKey) return;
+  if (pending) { if (event.key === "Escape") closeReason(); return; }
+  if (event.target instanceof HTMLButtonElement && event.key === "Enter") return;
+  const key = event.key.toLowerCase();
+  const actions = {
+    enter: () => $("accept").click(), y: () => choose("fit"), n: () => choose("no_fit"),
+    s: () => choose("skip"), b: goBack, o: () => items[index] && $("openkey").click(),
+  };
+  if (actions[key]) { event.preventDefault(); actions[key](); }
+});
+
+(async () => {
+  try {
+    const response = await fetch("/api/label/state");
+    if (!response.ok) throw new Error(await response.text());
+    const state = await response.json();
+    items = state.items;
+    stats = state.progress;
+    render();
+  } catch (error) {
+    $("done").textContent = `Cannot load the jobs: ${error.message}`;
+    show($("done"), true);
+  }
+})();
+</script>
+</body>
+</html>

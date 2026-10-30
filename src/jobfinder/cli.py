@@ -22,7 +22,7 @@ from jobfinder.labeling import Console, run_session
 from jobfinder.labels import Label, load_labels, load_suggestions
 from jobfinder.mailbox import ImapMailbox, Mailbox, MailboxError
 from jobfinder.models import Job
-from jobfinder.sampling import labeling_queue
+from jobfinder.sampling import labeling_queue, review_queue
 from jobfinder.scan import BoardOutcome, ScanReport, scan
 from jobfinder.scoring import PrioritiesError, load_priorities
 from jobfinder.storage import JobStore
@@ -155,9 +155,7 @@ def run_label(
         candidates = [stored.job for stored in store.open_jobs()]
     finally:
         store.close()
-    queue = labeling_queue(candidates, labels, seed)
-    # Jobs with a suggestion first, in queue order: they were drawn from this same order to be reviewed.
-    queue.sort(key=lambda job: job.key not in suggestions)
+    queue = review_queue(candidates, labels, suggestions, seed)
     try:
         run_session(
             queue, labels, labels_path, target, console or terminal_console(), lambda: datetime.now(tz=UTC),
@@ -317,7 +315,14 @@ def _print_extractions(extractor: Extractor, jobs: Sequence[Job]) -> int:
 
 
 def run_ui(
-    db_path: Path, labels_path: Path, priorities_path: Path, prefer: Sequence[str], port: int, open_browser: bool
+    db_path: Path,
+    labels_path: Path,
+    priorities_path: Path,
+    suggestions_path: Path,
+    prefer: Sequence[str],
+    seed: int,
+    port: int,
+    open_browser: bool,
 ) -> int:
     if not db_path.exists():
         print(f"no job database at {db_path}: run `jobfinder scan` first", file=sys.stderr)
@@ -325,6 +330,7 @@ def run_ui(
     try:
         load_priorities(priorities_path)
         load_labels(labels_path)
+        load_suggestions(suggestions_path)
     except (PrioritiesError, ValueError) as exc:
         print(exc, file=sys.stderr)
         return EXIT_CONFIG_ERROR
@@ -332,7 +338,7 @@ def run_ui(
     from jobfinder.ui import serve
 
     try:
-        serve(db_path, labels_path, priorities_path, prefer, port, open_browser)
+        serve(db_path, labels_path, priorities_path, suggestions_path, prefer, seed, port, open_browser)
     except OSError as exc:
         print(f"cannot listen on port {port}: {exc}", file=sys.stderr)
         return EXIT_CONFIG_ERROR
@@ -376,6 +382,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     ui_parser.add_argument("--db", type=Path, default=Path("data/jobs.db"))
     ui_parser.add_argument("--labels", type=Path, default=Path("data/labels.jsonl"))
     ui_parser.add_argument("--priorities", type=Path, default=Path("priorities.txt"))
+    ui_parser.add_argument("--suggestions", type=Path, default=Path("data/suggestions.jsonl"))
+    ui_parser.add_argument("--seed", type=int, default=2026, help="same job order as `jobfinder label`")
     ui_parser.add_argument(
         "--prefer", action="append", default=[],
         help="extractor name to use first when several read a job, e.g. gemini:gemini-3.5-flash (repeatable)",
@@ -397,7 +405,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             all_kept=args.all,
         )
     if args.command == "ui":
-        return run_ui(args.db, args.labels, args.priorities, args.prefer, args.port, not args.no_browser)
+        return run_ui(
+            args.db, args.labels, args.priorities, args.suggestions, args.prefer, args.seed, args.port,
+            not args.no_browser,
+        )
     parser.error(f"unknown command {args.command!r}")
 
 

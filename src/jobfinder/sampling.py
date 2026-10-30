@@ -17,7 +17,7 @@ from typing import Final
 
 from jobfinder.filtering import prefilter
 from jobfinder.geo import is_israel_location
-from jobfinder.labels import Label
+from jobfinder.labels import Label, Suggestion
 from jobfinder.models import Job
 
 
@@ -85,3 +85,12 @@ def labeling_queue(
         stratum = min(open_strata, key=lambda s: taken[s] / shares[s])
         queue.append(buckets[stratum].pop())
         taken[stratum] += 1
+
+
+def review_queue(
+    candidates: Iterable[Job], labeled: Mapping[str, Label], suggestions: Mapping[str, Suggestion], seed: int
+) -> list[Job]:
+    """`labeling_queue`, with the jobs that have a suggestion first (they were picked to be reviewed)."""
+    queue = labeling_queue(candidates, labeled, seed)
+    queue.sort(key=lambda job: job.key not in suggestions)
+    return queue

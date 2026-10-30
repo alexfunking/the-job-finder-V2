@@ -35,6 +35,12 @@ Register-ScheduledTask -TaskName 'job-finder daily scan' `
 
 ## Label the eval set
 ```bash
+uv run jobfinder ui      # then open http://127.0.0.1:8765/label
+```
+A screen in the local page shows one job at a time with its suggested label. Press Enter to accept the suggestion, `Y` (fit) or `N` (not fit) to give your own answer with a reason, `S` to skip, `B` to go back and `O` to open the posting; every action also has a button. Each answer is saved at once, and answering a job again replaces the earlier answer. Saving needs a token that only this server's own page receives, so another website cannot write labels through your browser.
+
+The same labeling works in the terminal, and both write the same file:
+```bash
 uv run jobfinder label
 ```
 Shows stored jobs one at a time; answer `y` (fit) or `n` (not fit) and say why, `s` to skip, `o` to open the posting, `b` to go back, `q` to quit. Every answer is saved at once to `data/labels.jsonl` (personal, not committed) with a full snapshot of the job, so a later session continues where you stopped and the eval set survives jobs closing. Stops at `--target` (default 80) fit / not-fit labels.
@@ -62,7 +68,7 @@ Runs an extractor on the first jobs of the labeling order and prints what it rea
 uv run jobfinder extract --all --extractor ollama   # read every job the filter keeps (cached; rerun is free)
 uv run jobfinder ui                                  # opens http://127.0.0.1:8765/
 ```
-Scores every open job the pre-filter keeps against `priorities.txt` (personal, not committed) and shows them in a local web page, in three tabs: **Match**, **Maybe** (nothing rules it out, but the level is unknown: no junior / student in the title and no years stated) and **No**. Each job shows its score out of 100 and why: level (40), field (30), location (20) and days in the office (10). A job the extractor has not read yet is scored from its title and location. The page reads the database on every reload, listens on 127.0.0.1 only, and changes nothing.
+Scores every open job the pre-filter keeps against `priorities.txt` (personal, not committed) and shows them in a local web page, in three tabs: **Match**, **Maybe** (nothing rules it out, but the level is unknown: no junior / student in the title and no years stated) and **No**. Each job shows its score out of 100 and why: level (40), field (30), location (20) and days in the office (10). A job the extractor has not read yet is scored from its title and location. The page reads the database on every reload and listens on 127.0.0.1 only; the only thing it can change is your labels.
 
 `priorities.txt` is TOML with `[profile] skills`, `[role] max_years / entry_title_words / field_title_words / reject_title_words`, `[location] accept / low_priority / reject`, `[onsite] preferred_max_days` and `[score] match_threshold`.
 
