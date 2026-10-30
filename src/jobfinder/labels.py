@@ -29,6 +29,8 @@ class Label(BaseModel):
     job: Job
     # The verdict suggested to the user when they labeled this job, if one was shown.
     suggestion: Verdict | None = None
+    # The user approved a batch of suggestions without answering this job on its own.
+    bulk_accepted: bool = False
 
     @model_validator(mode="after")
     def _reason_required(self) -> Label:

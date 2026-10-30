@@ -60,7 +60,7 @@ def test_rows_are_kept_jobs_ordered_match_maybe_no(files: tuple[Path, Path, Path
 def test_a_cached_extraction_for_the_current_text_is_used(files: tuple[Path, Path, Path]) -> None:
     db, labels, priorities = files
     store = JobStore.open(db)
-    answer = Extraction(years_required=0, onsite_days=2, is_student=False, location=None, stack=("Python",))
+    answer = Extraction(years_required=1, onsite_days=2, is_student=False, location=None, stack=("Python",))
     store.save_extraction("greenhouse:acme:2", "ollama:m", input_hash(JOBS[1]), answer.model_dump_json(), 1, 1, T1)
     store.save_extraction("greenhouse:acme:1", "ollama:m", "stale-hash", answer.model_dump_json(), 1, 1, T1)
     rows = {row.stored.job.job_id: row for row in match_rows(store, load_priorities(priorities), {})}

@@ -1,4 +1,4 @@
-"""Command line entry point: `jobfinder scan`, `alerts`, `label`, `filter`, `extract` and `ui`."""
+"""Command line entry point: `jobfinder scan`, `alerts`, `label`, `filter`, `extract`, `eval` and `ui`."""
 
 from __future__ import annotations
 
@@ -15,10 +15,11 @@ from pathlib import Path
 from jobfinder.alerts import import_alerts
 from jobfinder.config import ConfigError, load_boards
 from jobfinder.envfile import secret
+from jobfinder.evaluation import evaluate, extractor_names, render_report
 from jobfinder.extraction import EXTRACTORS, CachedExtractor, ExtractionError, Extractor, build_extractor
 from jobfinder.filtering import FilterResult, prefilter
 from jobfinder.http import Fetcher, UrllibFetcher, UrllibPoster
-from jobfinder.labeling import Console, run_session
+from jobfinder.labeling import Console, accept_suggestions, run_session
 from jobfinder.labels import Label, load_labels, load_suggestions
 from jobfinder.mailbox import ImapMailbox, Mailbox, MailboxError
 from jobfinder.models import Job
@@ -140,6 +141,7 @@ def run_label(
     seed: int,
     console: Console | None = None,
     suggestions_path: Path | None = None,
+    accept_rest: bool = False,
 ) -> int:
     if not db_path.exists():
         print(f"no job database at {db_path}: run `jobfinder scan` first", file=sys.stderr)
@@ -153,6 +155,11 @@ def run_label(
     store = JobStore.open(db_path)
     try:
         candidates = [stored.job for stored in store.open_jobs()]
+        if accept_rest:
+            found = {key: stored.job for key in suggestions if (stored := store.get(key)) is not None}
+            added = accept_suggestions(suggestions, labels, found, labels_path, lambda: datetime.now(tz=UTC))
+            print(f"Accepted {added} suggestions in bulk; {len(labels)} labels in {labels_path}")
+            return EXIT_OK
     finally:
         store.close()
     queue = review_queue(candidates, labels, suggestions, seed)
@@ -314,6 +321,33 @@ def _print_extractions(extractor: Extractor, jobs: Sequence[Job]) -> int:
     return EXIT_BOARD_ERRORS if failed else EXIT_OK
 
 
+def run_eval(db_path: Path, labels_path: Path, priorities_path: Path) -> int:
+    """Compare the pipeline with the labels, once per extractor and once from the titles alone."""
+    if not db_path.exists():
+        print(f"no job database at {db_path}: run `jobfinder scan` first", file=sys.stderr)
+        return EXIT_CONFIG_ERROR
+    try:
+        priorities = load_priorities(priorities_path)
+        labels = load_labels(labels_path)
+    except (PrioritiesError, ValueError) as exc:
+        print(exc, file=sys.stderr)
+        return EXIT_CONFIG_ERROR
+    if not any(label.counts for label in labels.values()):
+        print("No fit / not-fit labels yet: label jobs in `jobfinder ui` or `jobfinder label` first.")
+        return EXIT_OK
+    _replace_unprintable_output()
+    store = JobStore.open(db_path)
+    try:
+        reports = [
+            render_report(name, evaluate(labels, store, priorities, name)) for name in extractor_names(labels, store)
+        ]
+        reports.append(render_report("titles alone", evaluate(labels, store, priorities, None)))
+    finally:
+        store.close()
+    print("\n\n".join(reports))
+    return EXIT_OK
+
+
 def run_ui(
     db_path: Path,
     labels_path: Path,
@@ -363,6 +397,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     label_parser.add_argument(
         "--suggestions", type=Path, default=Path("data/suggestions.jsonl"), help="proposed labels to accept or override"
     )
+    label_parser.add_argument(
+        "--accept-rest", action="store_true", help="save every unanswered suggestion as a label, marked as bulk"
+    )
     filter_parser = commands.add_parser("filter", help="apply the location / seniority pre-filter and report")
     filter_parser.add_argument("--db", type=Path, default=Path("data/jobs.db"))
     filter_parser.add_argument("--labels", type=Path, default=Path("data/labels.jsonl"))
@@ -378,6 +415,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     extract_parser.add_argument(
         "--all", action="store_true", help="every job the pre-filter keeps that has a description (ignores --limit)"
     )
+    eval_parser = commands.add_parser("eval", help="measure the pre-filter and scoring against the labels")
+    eval_parser.add_argument("--db", type=Path, default=Path("data/jobs.db"))
+    eval_parser.add_argument("--labels", type=Path, default=Path("data/labels.jsonl"))
+    eval_parser.add_argument("--priorities", type=Path, default=Path("priorities.txt"))
     ui_parser = commands.add_parser("ui", help="show the scored jobs in a local web page")
     ui_parser.add_argument("--db", type=Path, default=Path("data/jobs.db"))
     ui_parser.add_argument("--labels", type=Path, default=Path("data/labels.jsonl"))
@@ -396,7 +437,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.command == "alerts":
         return run_alerts(args.db, args.env, args.days)
     if args.command == "label":
-        return run_label(args.db, args.labels, args.target, args.seed, suggestions_path=args.suggestions)
+        return run_label(
+            args.db, args.labels, args.target, args.seed, suggestions_path=args.suggestions,
+            accept_rest=args.accept_rest,
+        )
     if args.command == "filter":
         return run_filter(args.db, args.labels, args.show)
     if args.command == "extract":
@@ -404,6 +448,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             args.db, args.env, args.extractor, args.model, args.limit, args.seed, use_cache=not args.no_cache,
             all_kept=args.all,
         )
+    if args.command == "eval":
+        return run_eval(args.db, args.labels, args.priorities)
     if args.command == "ui":
         return run_ui(
             args.db, args.labels, args.priorities, args.suggestions, args.prefer, args.seed, args.port,

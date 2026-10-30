@@ -172,3 +172,30 @@ def _read_reason(console: Console, default: str | None = None) -> str | None:
         if reason or default:
             return reason or default
         console.write("A reason is required: it is what the filter and the priorities are built from.")
+
+
+def accept_suggestions(
+    suggestions: Mapping[str, Suggestion],
+    labels: MutableMapping[str, Label],
+    jobs: Mapping[str, Job],
+    labels_path: Path,
+    now: Callable[[], datetime],
+) -> int:
+    """Save every suggestion the user has not answered as their label, marked as accepted in bulk.
+
+    Only for when the user approves the suggestions as a batch. Existing answers are kept, and a job no
+    longer in the store is left out. Returns how many labels were added.
+    """
+    added = 0
+    for key, suggestion in suggestions.items():
+        job = jobs.get(key)
+        if key in labels or job is None:
+            continue
+        label = Label(
+            verdict=suggestion.verdict, reason=suggestion.reason, labeled_at=now(), job=job,
+            suggestion=suggestion.verdict, bulk_accepted=True,
+        )
+        append_label(labels_path, label)
+        labels[key] = label
+        added += 1
+    return added

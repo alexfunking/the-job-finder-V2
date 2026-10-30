@@ -63,6 +63,14 @@ uv run jobfinder extract --extractor ollama --limit 10 --model qwen2.5:32b
 ```
 Runs an extractor on the first jobs of the labeling order and prints what it reads from each posting: `years_required`, `onsite_days`, `is_student`, `location` and `stack`, plus the tokens spent. Answers are saved in `data/jobs.db` (table `extractions`, one per job and extractor) and reused while the posting and the prompt stay the same, so a rerun costs nothing; `--no-cache` asks the model again. Both extractors get the same instructions and JSON schema (`src/jobfinder/extraction/base.py`), and only the public posting text is sent, never your priorities. A busy model (HTTP 503) or a per-minute quota (429) is retried after 5, 20 and 60 seconds.
 
+## Measure the pipeline
+```bash
+uv run jobfinder eval
+```
+Runs every fit / not-fit label through the pre-filter and scoring, once per extractor with saved answers and once from the titles alone, and prints precision of "match", recall and student recall against the goals (85% and 90%), then every wrong match and missed fit. Nothing is sent to a model, so a job the extractor has not read is scored from its title.
+
+`uv run jobfinder label --accept-rest` saves every unanswered suggestion as a label, marked `bulk_accepted`. Use it only when you approve the suggestions as a batch. The eval reports the labels answered one at a time separately, because bulk labels were never looked at individually.
+
 ## See the matches
 ```bash
 uv run jobfinder extract --all --extractor ollama   # read every job the filter keeps (cached; rerun is free)

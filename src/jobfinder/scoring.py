@@ -96,10 +96,11 @@ def load_priorities(path: Path) -> Priorities:
 @functools.cache
 def _pattern(words: tuple[str, ...]) -> re.Pattern[str] | None:
     # All-capital words (IT, HR, QA, BI) match only in capitals, so "IT" never matches the word "it".
+    # A hyphen joins a word to the next one ("IT-Security"), but "Student- Glil Yam" still ends the word.
     if not words:
         return None
     alternatives = [re.escape(word) if word.isupper() else f"(?i:{re.escape(word)})" for word in words]
-    return re.compile(r"(?<![\w-])(?:" + "|".join(alternatives) + r")(?![\w-])")
+    return re.compile(r"(?<![\w-])(?:" + "|".join(alternatives) + r")(?![\w]|-\w)")
 
 
 def find_word(words: tuple[str, ...], text: str) -> str | None:
@@ -136,11 +137,11 @@ def score_job(job: Job, extraction: Extraction | None, priorities: Priorities) -
         level, note = LEVEL_POINTS, "student role"
     elif entry_word:
         level, note = LEVEL_POINTS, f"entry-level title ({entry_word})"
-    elif years is not None and years <= priorities.max_years:
+    elif years and years <= priorities.max_years:  # models write 0 for postings that state no years
         level, note = LEVEL_POINTS, f"asks {years} years"
     else:
         level, level_known = 0, False
-        note = "years not stated" if years is None else f"asks {years} years"
+        note = f"asks {years} years" if years else "years not stated"
     if years is not None and years > priorities.max_years:
         rejections.append(f"asks {years} years (you accept up to {priorities.max_years})")
     reasons.append(f"level {level}/{LEVEL_POINTS}: {note}")
@@ -190,7 +191,7 @@ def score_job(job: Job, extraction: Extraction | None, priorities: Priorities) -
     points = level + field + location + onsite
     if rejections:
         verdict = Verdict.NO
-    elif level_known and points >= priorities.match_threshold:
+    elif level_known and field > 0 and points >= priorities.match_threshold:
         verdict = Verdict.MATCH
     else:
         verdict = Verdict.MAYBE

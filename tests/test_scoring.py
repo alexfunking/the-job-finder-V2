@@ -73,6 +73,23 @@ def test_stated_years_within_the_limit_count_as_entry_level(priorities: Prioriti
     assert score_job(job("Data Engineer"), extraction(years=1), priorities).verdict is Verdict.MATCH
 
 
+def test_zero_years_is_not_evidence_of_an_entry_level_job(priorities: Priorities) -> None:
+    score = score_job(job("Data Engineer"), extraction(years=0), priorities)
+    assert score.verdict is Verdict.MAYBE
+    assert "level 0/40: years not stated" in score.reasons
+
+
+def test_an_entry_level_job_outside_your_fields_is_a_maybe(priorities: Priorities) -> None:
+    score = score_job(job("Junior Coordinator"), extraction(), priorities)
+    assert score.points >= 50
+    assert score.verdict is Verdict.MAYBE
+
+
+def test_a_word_before_a_loose_hyphen_still_counts(priorities: Priorities) -> None:
+    assert find_word(("student",), "Software Engineer Student- Glil Yam") == "Student"
+    assert find_word(("IT",), "IT-Security Engineer") is None
+
+
 def test_too_many_years_rejects_even_a_junior_title(priorities: Priorities) -> None:
     score = score_job(job(), extraction(years=3), priorities)
     assert score.verdict is Verdict.NO
