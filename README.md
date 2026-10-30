@@ -23,7 +23,7 @@ Reads the LinkedIn job-alert emails in a dedicated mailbox over IMAP, read-only 
 Setup: copy `.env.example` to `.env` and set `ALERTS_EMAIL_ACCOUNT` and `ALERTS_EMAIL_APP_PASSWORD` (a Gmail app password, never the account password).
 
 ## Daily run
-`scripts/daily.cmd` runs `jobfinder scan` and then `jobfinder alerts --days 3`, appending everything to `data/logs/daily.log`. A Windows Task Scheduler task runs it every morning; to create one:
+`scripts/daily.cmd` runs `jobfinder scan`, then `jobfinder alerts --days 3`, then `jobfinder extract --all --extractor ollama` so the local model reads new postings (Ollama must be running; a job that fails is retried on the next run). Output is appended to `data/logs/daily.log`, except the extraction's job-by-job list, which is in `data/logs/extract.log` for the latest run only. A Windows Task Scheduler task runs it every morning; to create one:
 ```powershell
 $repo = (Get-Location).Path
 Register-ScheduledTask -TaskName 'job-finder daily scan' `

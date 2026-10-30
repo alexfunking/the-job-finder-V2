@@ -8,9 +8,9 @@ Design and ADRs: `C:\Users\alex0\Vault\02_Projects\Job Finder\Job Finder - Archi
 ## Where we are
 **Phase 2 (measurable scoring), steps 1–4 of 7, plus a new source: LinkedIn job alerts by email.** The labeling tool, the deterministic pre-filter, `jobfinder alerts` and the extractors (Gemini and Ollama, `jobfinder extract`) are built; the hand-labeled eval set is in progress (the user started labeling on 2026-10-28), so nothing is measured yet.
 
-Repo: https://github.com/alexfunking/the-job-finder-V2 (public), `main` tracks `origin/main` and is pushed up to `4b33148` (daily run, labeling order, extractors, extraction cache, suggested labels); check `git status -sb`. 278 tests pass, `mypy --strict` clean.
+Repo: https://github.com/alexfunking/the-job-finder-V2 (public), `main` tracks `origin/main` ; check `git status -sb` for what is pushed. 328 tests pass, `mypy --strict` clean.
 
-**Daily run (since 2026-10-28):** Windows Task Scheduler task `job-finder daily scan` runs `scripts/daily.cmd` at 08:00 (or as soon as possible after a missed start): `jobfinder scan`, then `jobfinder alerts --days 3`. Output is appended to `data/logs/daily.log` (gitignored). Check that log to verify closing / reopening across days.
+**Daily run (since 2026-10-28):** Windows Task Scheduler task `job-finder daily scan` runs `scripts/daily.cmd` at 08:00 (or as soon as possible after a missed start): `jobfinder scan`, then `jobfinder alerts --days 3`, then (since 2026-10-30) `jobfinder extract --all --extractor ollama`. Output is appended to `data/logs/daily.log` (gitignored); the extraction's job list is in `data/logs/extract.log`, latest run only. Ollama starts at login, so if the run happens before login the extract step fails and the next run catches up: look for `extract 1` on the log's exit line. Check that log to verify closing / reopening across days.
 
 ## Done
 - **Phase 0 — ATS mapping** (`tools/ats_probe.py`): 58 companies probed. 25 have a public API (21 Greenhouse, 4 Ashby) with 408 Israel jobs. Comeet (9 companies) deferred, ADR-002. 14 large companies have no public API (Workday or in-house).
