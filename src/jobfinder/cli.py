@@ -14,7 +14,7 @@ from pathlib import Path
 
 from jobfinder.alerts import import_alerts
 from jobfinder.config import ConfigError, load_boards
-from jobfinder.digest import DEFAULT_DAYS, render_messages, select_digest
+from jobfinder.digest import DEFAULT_DAYS, collect_answers, render_messages, select_digest
 from jobfinder.envfile import secret
 from jobfinder.evaluation import evaluate, extractor_names, render_report
 from jobfinder.extraction import EXTRACTORS, CachedExtractor, ExtractionError, Extractor, build_extractor
@@ -28,7 +28,7 @@ from jobfinder.models import Job
 from jobfinder.sampling import labeling_queue, review_queue
 from jobfinder.scan import BoardOutcome, ScanReport, scan
 from jobfinder.scoring import PrioritiesError, load_priorities
-from jobfinder.storage import JobStore
+from jobfinder.storage import LATER, JobStore
 from jobfinder.telegram import TelegramBot
 
 EXIT_OK = 0
@@ -375,31 +375,37 @@ def run_digest(
         return EXIT_CONFIG_ERROR
     try:
         priorities = load_priorities(priorities_path)
-        labels = load_labels(labels_path)
+        load_labels(labels_path)
     except (PrioritiesError, ValueError) as exc:
         print(exc, file=sys.stderr)
         return EXIT_CONFIG_ERROR
     now = datetime.now(tz=UTC)
     store = JobStore.open(db_path)
     try:
-        rows = match_rows(store, priorities, labels)
-        digest = select_digest(rows, store.digest_sent_keys(), now, days)
+        answered = 0
+        bot = None
+        if not dry_run:
+            assert token is not None and chat_id is not None
+            bot = TelegramBot(token, poster or UrllibPoster(timeout_s=30.0))
+            answered = collect_answers(bot, store, labels_path, chat_id, now)
+        rows = match_rows(store, priorities, load_labels(labels_path))
+        later = [key for key, answer in store.digest_answers().items() if answer == LATER]
+        digest = select_digest(rows, store.digest_sent_keys(), now, days, later)
         messages = render_messages(digest)
-        if dry_run:
+        if bot is None:
             _replace_unprintable_output()
             print("\n\n".join(message.text for message in messages) or "Nothing new to send.")
             return EXIT_OK
-        assert token is not None and chat_id is not None
-        bot = TelegramBot(token, poster or UrllibPoster(timeout_s=30.0))
-        for message in messages:
-            bot.send_message(chat_id, message.text)
+        assert chat_id is not None
+        for position, message in enumerate(messages):
+            bot.send_message(chat_id, message.text, message.buttons, quiet=position > 0)
             store.mark_digest_sent(message.keys, now)
     except FetchError as exc:
         print(f"digest not fully sent: {exc}", file=sys.stderr)
         return EXIT_BOARD_ERRORS
     finally:
         store.close()
-    print(f"Digest: {len(digest.items)} jobs in {len(messages)} messages, {digest.waiting} waiting")
+    print(f"Digest: {answered} answers saved, {len(digest.items)} jobs sent, {digest.waiting} waiting")
     return EXIT_OK
 
 

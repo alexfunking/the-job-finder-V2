@@ -6,9 +6,9 @@ Source of truth for the plan: Obsidian vault `~/Vault/02_Projects/Jarvis/Jarvis 
 Design and ADRs: `~/Vault/02_Projects/Job Finder/Job Finder - Architecture.md` (ADR-001 to ADR-008).
 
 ## Where we are
-**Phase 2 (measurable scoring), all 7 steps built; the blind check on 2026-11-02 meets G1 (see "Blind check" below).** Everything up to the matches page runs daily: collection, pre-filter, reading with the local model, scoring, `jobfinder ui`, `jobfinder eval`. Phase 3 (Telegram digest) has started: `jobfinder digest` sends new jobs to the user's bot and runs daily since 2026-11-02. Buttons and the weekly watchlist are not built.
+**Phase 2 (measurable scoring), all 7 steps built; the blind check on 2026-11-02 meets G1 (see "Blind check" below).** Everything up to the matches page runs daily: collection, pre-filter, reading with the local model, scoring, `jobfinder ui`, `jobfinder eval`. Phase 3 (Telegram digest) has started: `jobfinder digest` sends new jobs to the user's bot and runs daily since 2026-11-02. Each job has buttons (Applied, Not relevant, Later). The weekly watchlist is not built.
 
-Repo: https://github.com/alexfunking/the-job-finder-V2 (public), `main` tracks `origin/main` ; check `git status -sb` for what is pushed. 345 tests pass, `mypy --strict` clean.
+Repo: https://github.com/alexfunking/the-job-finder-V2 (public), `main` tracks `origin/main` ; check `git status -sb` for what is pushed. 356 tests pass, `mypy --strict` clean.
 
 **Daily run (since 2026-10-28):** Windows Task Scheduler task `job-finder daily scan` runs `scripts/daily.cmd` at 08:00 (or as soon as possible after a missed start): `jobfinder scan`, then `jobfinder alerts --days 3`, then (since 2026-10-30) `jobfinder extract --all --extractor ollama`, then (since 2026-11-02) `jobfinder digest`. Output is appended to `data/logs/daily.log` (gitignored); the extraction's job list is in `data/logs/extract.log`, latest run only. Ollama starts at login, so if the run happens before login the extract step fails and the next run catches up: look for `extract 1` on the log's exit line. Check that log to verify closing / reopening across days.
 
@@ -35,6 +35,8 @@ Repo: https://github.com/alexfunking/the-job-finder-V2 (public), `main` tracks `
 
 **Digest (2026-11-02, Phase 3, first step):** `jobfinder digest` (`digest.py`, `telegram.py`) selects jobs first seen in the last 7 days and never sent: up to 15, matches first, then up to 5 maybes with field points and at least 50 points. Same company + title is one item, across sources. A label of not fit silences a job. The field-points condition came from the first dry run: points alone sent Car Advocate and Office Admin. Sent jobs are in the `digest_sent` table (DB schema v4, backup of v3 in `data/jobs.v3-backup.db`). The first real digest went out on 2026-11-02 with 1 match and 4 maybes, and `scripts/daily.cmd` now sends it; a full run of the script ended with exit 0. An empty digest sends nothing, so a quiet day and a failed run look the same in Telegram: check the log's exit line.
 
+**Digest buttons (2026-11-02):** each job is now its own message with Applied, Not relevant and Later (DB schema v5, table `digest_answers`, backup of v4 in `data/jobs.v4-backup.db`). `jobfinder digest` pulls presses with `getUpdates` before it selects jobs, so nothing stays running. Applied and Not relevant also append a label, so these reach `jobfinder eval`. Later brings a job back in the next digest, whatever its age. Only presses whose user and chat are `TELEGRAM_CHAT_ID` count. Checked on a real press on 2026-11-02: one Applied was read, saved and labeled.
+
 ## Next steps
 1. **Done (2026-10-30):** suggestions reviewed and approved. Labeling more jobs one at a time at `/label` is what would make the eval trustworthy.
 2. **Done (2026-10-28):** deterministic pre-filter, `jobfinder filter` (`filtering.py`). Location must name a place in Israel (unplaced "Remote" is kept); senior title words rejected unless student / intern / junior. Does not read the description. On the real DB: 162 of 1,450 open jobs kept. Measure it once labels exist: "fit, rejected" must be 0.
@@ -42,7 +44,7 @@ Repo: https://github.com/alexfunking/the-job-finder-V2 (public), `main` tracks `
 4. **Done (2026-10-28):** `GeminiExtractor` and `OllamaExtractor` — ADR-006. **Done (2026-10-28):** extractions are cached in the `extractions` table (DB schema v3), keyed by job and extractor and checked against a hash of the prompt and the posting (`CachedExtractor`). Backup of the v2 DB: `data/jobs.v2-backup.db`. **Next in code:** `jobfinder eval`. Consider lowering Gemini's thinking to cut output tokens, but only if the eval says accuracy holds. For now the API one is **Gemini**: the key is in `.env` as `GEMINI_API_KEY` (gitignored, verified 2026-10-28 by listing models). Claude Haiku 5.5 is added later as another implementation, so keep the interface provider-neutral. Pick by eval: go local if within 3–5 precision points.
 5. **Done (2026-10-28):** score computed in code from `priorities.txt` (`scoring.py`).
 6. **Done (2026-10-30):** `jobfinder eval`. Phase 2 is done when goals G1 and G2 hold on the eval set. **Done (2026-11-02):** blind check on jobs the tuning did not see (see above): G1 holds, G2 has little individual evidence. Comparing Gemini with Ollama is left until the maybes are looked at.
-7. Phase 3, in progress. Done: `jobfinder digest` with duplicate grouping, in the daily run. Next: buttons (applied / not relevant / later) read with `getUpdates` at the start of each run; only the user's chat id is accepted; the weekly watchlist of careers pages for companies without an API (ADR-007).
+7. Phase 3, in progress. Done: `jobfinder digest` with duplicate grouping, in the daily run, with buttons. Next: the weekly watchlist of careers pages for companies without an API (ADR-007), then two weeks of daily use for G3.
 
 ## Open tasks on the user's side
 - Review the draft `priorities.txt` (gitignored, written 2026-10-28 from the CV): fit = student / intern, or junior asking 0-1 years; fields data / BI / analyst and software development; location anywhere in the Center (Netanya marked as too far, to confirm) or remote; up to 3 office days preferred, more only lowers the score.
@@ -50,6 +52,9 @@ Repo: https://github.com/alexfunking/the-job-finder-V2 (public), `main` tracks `
 - Archive the old repo `alexfunking/The_job_Finder`.
 
 ## Known gaps
+- Button presses are read only by the daily run, so a press shows nothing until the next run, and Telegram drops presses after 24 hours. Running `jobfinder digest` more often would shorten that, but it would also send new jobs at that moment.
+- A job the user never answers is not shown again.
+- The Telegram token was pasted into a chat on 2026-11-02. If it was not revoked in BotFather afterwards, revoke it and update `.env`.
 - The daily run of 2026-11-01 started at 09:14 and logged nothing after its header, not even the exit line. Cause unknown: Task Scheduler history is off, and the system log shows only a shutdown at 12:33. The next run was fine, and the task has a 30-minute limit. Watch for a header with no `exit:` line.
 - A posting asking "1-2 years" counts as 1, because `years_required` is the minimum. The user judged such a job too senior (Taboola Fraud Analyst). Telling them apart needs the top of the range from the extractor.
 - The 373 maybes are unmeasured: a job with no "junior" in the title and no years stated stays a maybe, so the digest needs a rule for which maybes to show.

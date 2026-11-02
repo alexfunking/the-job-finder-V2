@@ -15,7 +15,8 @@ from typing import Final
 
 from jobfinder.models import Job
 
-SCHEMA_VERSION: Final = 4
+SCHEMA_VERSION: Final = 5
+LATER: Final = "later"  # the digest answer that asks to see a job again
 
 _JOBS_TABLE: Final = """
 CREATE TABLE {name} (
@@ -60,6 +61,15 @@ CREATE TABLE digest_sent (
 );
 """
 
+# The user's last answer to a job in the digest. A later answer is cleared when the job is sent again.
+_DIGEST_ANSWERS_TABLE: Final = """
+CREATE TABLE digest_answers (
+    key         TEXT PRIMARY KEY,
+    answer      TEXT NOT NULL,
+    answered_at TEXT NOT NULL
+);
+"""
+
 # v1 -> v2: description_text may be NULL (email alerts carry no description). SQLite cannot drop a
 # NOT NULL constraint in place, so the table is rebuilt and the rows copied.
 _MIGRATE_1_TO_2: Final = (
@@ -71,9 +81,14 @@ _MIGRATE_1_TO_2: Final = (
 )
 _MIGRATE_2_TO_3: Final = _EXTRACTIONS_TABLE
 _MIGRATE_3_TO_4: Final = _DIGEST_SENT_TABLE
+_MIGRATE_4_TO_5: Final = _DIGEST_ANSWERS_TABLE
 # The script that takes a database from version N to N + 1.
-_MIGRATIONS: Final[dict[int, str]] = {1: _MIGRATE_1_TO_2, 2: _MIGRATE_2_TO_3, 3: _MIGRATE_3_TO_4}
-_CREATE: Final = _JOBS_TABLE.format(name="jobs") + _INDEX + _EXTRACTIONS_TABLE + _DIGEST_SENT_TABLE
+_MIGRATIONS: Final[dict[int, str]] = {
+    1: _MIGRATE_1_TO_2, 2: _MIGRATE_2_TO_3, 3: _MIGRATE_3_TO_4, 4: _MIGRATE_4_TO_5,
+}
+_CREATE: Final = (
+    _JOBS_TABLE.format(name="jobs") + _INDEX + _EXTRACTIONS_TABLE + _DIGEST_SENT_TABLE + _DIGEST_ANSWERS_TABLE
+)
 
 _JOB_COLUMNS: Final = (
     "source", "slug", "job_id", "company", "title", "location", "url",
@@ -297,6 +312,22 @@ class JobStore:
             self._db.executemany(
                 "INSERT OR IGNORE INTO digest_sent (key, sent_at) VALUES (?, ?)", [(key, now) for key in keys]
             )
+            self._db.executemany(
+                "DELETE FROM digest_answers WHERE key = ? AND answer = ?", [(key, LATER) for key in keys]
+            )
+
+    def save_digest_answer(self, key: str, answer: str, answered_at: datetime) -> None:
+        with self._db:
+            self._db.execute(
+                """
+                INSERT INTO digest_answers (key, answer, answered_at) VALUES (?, ?, ?)
+                ON CONFLICT (key) DO UPDATE SET answer = excluded.answer, answered_at = excluded.answered_at
+                """,
+                (key, answer, _to_db_time(answered_at)),
+            )
+
+    def digest_answers(self) -> dict[str, str]:
+        return {row["key"]: row["answer"] for row in self._db.execute("SELECT key, answer FROM digest_answers")}
 
     @staticmethod
     def _job_values(job: Job) -> tuple[str | None, ...]:

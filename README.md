@@ -70,6 +70,8 @@ uv run jobfinder digest              # send it
 ```
 Sends the jobs first seen in the last 7 days (`--days`) that were never sent: up to 15, matches first, then up to 5 maybes in your field with at least 50 points. Postings with the same company and title count as one job, across sources too, a job you labeled not fit is never sent, and what does not fit waits for the next digest. A job is marked as sent only after its message is delivered. Link previews are off, so Telegram does not fetch the job links.
 
+Each job is its own message with three buttons. **Applied** and **Not relevant** are saved and added to `data/labels.jsonl`, so daily use grows the eval set; **Later** brings the job back in the next digest, whatever its age. No process stays up: each `jobfinder digest` first reads the presses since the last run and then replaces the buttons of each answered job with what you chose, so a press shows no effect until then. Telegram keeps presses for 24 hours; one that is lost can simply be pressed again. Only presses from `TELEGRAM_CHAT_ID` count.
+
 To set it up, create a bot with @BotFather in Telegram and put its token in `.env` as `TELEGRAM_BOT_TOKEN`. Send the bot any message, run `uv run jobfinder digest --find-chat`, and put the number it prints in `.env` as `TELEGRAM_CHAT_ID`.
 
 ## Measure the pipeline
