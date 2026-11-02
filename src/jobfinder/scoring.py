@@ -118,6 +118,7 @@ class Verdict(StrEnum):
 @dataclass(frozen=True, slots=True)
 class Score:
     points: int
+    field_points: int
     verdict: Verdict
     # Why each part scored what it did, in the order level, field, location, office days.
     reasons: tuple[str, ...]
@@ -195,7 +196,9 @@ def score_job(job: Job, extraction: Extraction | None, priorities: Priorities) -
         verdict = Verdict.MATCH
     else:
         verdict = Verdict.MAYBE
-    return Score(points=points, verdict=verdict, reasons=tuple(reasons), rejections=tuple(rejections))
+    return Score(
+        points=points, field_points=field, verdict=verdict, reasons=tuple(reasons), rejections=tuple(rejections)
+    )
 
 
 def _shared_skills(extraction: Extraction, priorities: Priorities) -> tuple[str, ...]:

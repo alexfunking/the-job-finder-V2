@@ -1,4 +1,4 @@
-"""Command line entry point: `jobfinder scan`, `alerts`, `label`, `filter`, `extract`, `eval` and `ui`."""
+"""Command line entry point: `jobfinder scan`, `alerts`, `label`, `filter`, `extract`, `eval`, `digest` and `ui`."""
 
 from __future__ import annotations
 
@@ -14,19 +14,22 @@ from pathlib import Path
 
 from jobfinder.alerts import import_alerts
 from jobfinder.config import ConfigError, load_boards
+from jobfinder.digest import DEFAULT_DAYS, render_messages, select_digest
 from jobfinder.envfile import secret
 from jobfinder.evaluation import evaluate, extractor_names, render_report
 from jobfinder.extraction import EXTRACTORS, CachedExtractor, ExtractionError, Extractor, build_extractor
 from jobfinder.filtering import FilterResult, prefilter
-from jobfinder.http import Fetcher, UrllibFetcher, UrllibPoster
+from jobfinder.http import FetchError, Fetcher, Poster, UrllibFetcher, UrllibPoster
 from jobfinder.labeling import Console, accept_suggestions, run_session
 from jobfinder.labels import Label, load_labels, load_suggestions
 from jobfinder.mailbox import ImapMailbox, Mailbox, MailboxError
+from jobfinder.matches import match_rows
 from jobfinder.models import Job
 from jobfinder.sampling import labeling_queue, review_queue
 from jobfinder.scan import BoardOutcome, ScanReport, scan
 from jobfinder.scoring import PrioritiesError, load_priorities
 from jobfinder.storage import JobStore
+from jobfinder.telegram import TelegramBot
 
 EXIT_OK = 0
 EXIT_BOARD_ERRORS = 1  # the scan ran, but at least one board could not be read
@@ -349,6 +352,72 @@ def run_eval(db_path: Path, labels_path: Path, priorities_path: Path, since: dat
     return EXIT_OK
 
 
+TELEGRAM_TOKEN_VAR = "TELEGRAM_BOT_TOKEN"
+TELEGRAM_CHAT_VAR = "TELEGRAM_CHAT_ID"
+
+
+def run_digest(
+    db_path: Path,
+    labels_path: Path,
+    priorities_path: Path,
+    env_file: Path,
+    days: int,
+    dry_run: bool = False,
+    poster: Poster | None = None,
+) -> int:
+    """Send what is new since the last digest; `dry_run` prints it instead and marks nothing as sent."""
+    if not db_path.exists():
+        print(f"no job database at {db_path}: run `jobfinder scan` first", file=sys.stderr)
+        return EXIT_CONFIG_ERROR
+    token, chat_id = secret(TELEGRAM_TOKEN_VAR, env_file), secret(TELEGRAM_CHAT_VAR, env_file)
+    if not dry_run and (not token or not chat_id):
+        print(f"set {TELEGRAM_TOKEN_VAR} and {TELEGRAM_CHAT_VAR} in {env_file}", file=sys.stderr)
+        return EXIT_CONFIG_ERROR
+    try:
+        priorities = load_priorities(priorities_path)
+        labels = load_labels(labels_path)
+    except (PrioritiesError, ValueError) as exc:
+        print(exc, file=sys.stderr)
+        return EXIT_CONFIG_ERROR
+    now = datetime.now(tz=UTC)
+    store = JobStore.open(db_path)
+    try:
+        rows = match_rows(store, priorities, labels)
+        digest = select_digest(rows, store.digest_sent_keys(), now, days)
+        messages = render_messages(digest)
+        if dry_run:
+            _replace_unprintable_output()
+            print("\n\n".join(message.text for message in messages) or "Nothing new to send.")
+            return EXIT_OK
+        assert token is not None and chat_id is not None
+        bot = TelegramBot(token, poster or UrllibPoster(timeout_s=30.0))
+        for message in messages:
+            bot.send_message(chat_id, message.text)
+            store.mark_digest_sent(message.keys, now)
+    except FetchError as exc:
+        print(f"digest not fully sent: {exc}", file=sys.stderr)
+        return EXIT_BOARD_ERRORS
+    finally:
+        store.close()
+    print(f"Digest: {len(digest.items)} jobs in {len(messages)} messages, {digest.waiting} waiting")
+    return EXIT_OK
+
+
+def run_find_chat(env_file: Path, poster: Poster | None = None) -> int:
+    """Print the chats that wrote to the bot, to find the id for `.env`."""
+    token = secret(TELEGRAM_TOKEN_VAR, env_file)
+    if not token:
+        print(f"set {TELEGRAM_TOKEN_VAR} in {env_file}", file=sys.stderr)
+        return EXIT_CONFIG_ERROR
+    try:
+        chats = TelegramBot(token, poster or UrllibPoster(timeout_s=30.0)).recent_chat_ids()
+    except FetchError as exc:
+        print(f"cannot reach the bot: {exc}", file=sys.stderr)
+        return EXIT_BOARD_ERRORS
+    print("\n".join(chats) or "No chats yet: send your bot a message in Telegram, then run this again.")
+    return EXIT_OK
+
+
 def run_ui(
     db_path: Path,
     labels_path: Path,
@@ -423,7 +492,15 @@ def main(argv: Sequence[str] | None = None) -> int:
     eval_parser.add_argument(
         "--since", type=date.fromisoformat, help="also report the labels answered from this day on (YYYY-MM-DD)"
     )
-    ui_parser =commands.add_parser("ui", help="show the scored jobs in a local web page")
+    digest_parser = commands.add_parser("digest", help="send the new matches to Telegram")
+    digest_parser.add_argument("--db", type=Path, default=Path("data/jobs.db"))
+    digest_parser.add_argument("--labels", type=Path, default=Path("data/labels.jsonl"))
+    digest_parser.add_argument("--priorities", type=Path, default=Path("priorities.txt"))
+    digest_parser.add_argument("--env", type=Path, default=Path(".env"), help="file with the bot token and chat id")
+    digest_parser.add_argument("--days", type=int, default=DEFAULT_DAYS, help="only jobs first seen in the last N days")
+    digest_parser.add_argument("--dry-run", action="store_true", help="print the digest; send and mark nothing")
+    digest_parser.add_argument("--find-chat", action="store_true", help="print the chats that wrote to the bot")
+    ui_parser = commands.add_parser("ui", help="show the scored jobs in a local web page")
     ui_parser.add_argument("--db", type=Path, default=Path("data/jobs.db"))
     ui_parser.add_argument("--labels", type=Path, default=Path("data/labels.jsonl"))
     ui_parser.add_argument("--priorities", type=Path, default=Path("priorities.txt"))
@@ -454,6 +531,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
     if args.command == "eval":
         return run_eval(args.db, args.labels, args.priorities, args.since)
+    if args.command == "digest":
+        if args.find_chat:
+            return run_find_chat(args.env)
+        return run_digest(args.db, args.labels, args.priorities, args.env, args.days, args.dry_run)
     if args.command == "ui":
         return run_ui(
             args.db, args.labels, args.priorities, args.suggestions, args.prefer, args.seed, args.port,

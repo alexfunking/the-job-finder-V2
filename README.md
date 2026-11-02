@@ -23,7 +23,7 @@ Reads the LinkedIn job-alert emails in a dedicated mailbox over IMAP, read-only 
 Setup: copy `.env.example` to `.env` and set `ALERTS_EMAIL_ACCOUNT` and `ALERTS_EMAIL_APP_PASSWORD` (a Gmail app password, never the account password).
 
 ## Daily run
-`scripts/daily.cmd` runs `jobfinder scan`, then `jobfinder alerts --days 3`, then `jobfinder extract --all --extractor ollama` so the local model reads new postings (Ollama must be running; a job that fails is retried on the next run). Output is appended to `data/logs/daily.log`, except the extraction's job-by-job list, which is in `data/logs/extract.log` for the latest run only. A Windows Task Scheduler task runs it every morning; to create one:
+`scripts/daily.cmd` runs `jobfinder scan`, then `jobfinder alerts --days 3`, then `jobfinder extract --all --extractor ollama` so the local model reads new postings (Ollama must be running; a job that fails is retried on the next run), then `jobfinder digest` to send what is new to Telegram. Output is appended to `data/logs/daily.log`, except the extraction's job-by-job list, which is in `data/logs/extract.log` for the latest run only. A Windows Task Scheduler task runs it every morning; to create one:
 ```powershell
 $repo = (Get-Location).Path
 Register-ScheduledTask -TaskName 'job-finder daily scan' `
@@ -62,6 +62,15 @@ uv run jobfinder extract                          # Gemini (GEMINI_API_KEY in .e
 uv run jobfinder extract --extractor ollama --limit 10 --model qwen2.5:32b
 ```
 Runs an extractor on the first jobs of the labeling order and prints what it reads from each posting: `years_required`, `onsite_days`, `is_student`, `location` and `stack`, plus the tokens spent. Answers are saved in `data/jobs.db` (table `extractions`, one per job and extractor) and reused while the posting and the prompt stay the same, so a rerun costs nothing; `--no-cache` asks the model again. Both extractors get the same instructions and JSON schema (`src/jobfinder/extraction/base.py`), and only the public posting text is sent, never your priorities. A busy model (HTTP 503) or a per-minute quota (429) is retried after 5, 20 and 60 seconds.
+
+## Telegram digest
+```bash
+uv run jobfinder digest --dry-run    # print it; nothing is sent or marked
+uv run jobfinder digest              # send it
+```
+Sends the jobs first seen in the last 7 days (`--days`) that were never sent: up to 15, matches first, then up to 5 maybes in your field with at least 50 points. Postings with the same company and title count as one job, across sources too, a job you labeled not fit is never sent, and what does not fit waits for the next digest. A job is marked as sent only after its message is delivered. Link previews are off, so Telegram does not fetch the job links.
+
+To set it up, create a bot with @BotFather in Telegram and put its token in `.env` as `TELEGRAM_BOT_TOKEN`. Send the bot any message, run `uv run jobfinder digest --find-chat`, and put the number it prints in `.env` as `TELEGRAM_CHAT_ID`.
 
 ## Measure the pipeline
 ```bash

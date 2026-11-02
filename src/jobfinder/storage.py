@@ -15,7 +15,7 @@ from typing import Final
 
 from jobfinder.models import Job
 
-SCHEMA_VERSION: Final = 3
+SCHEMA_VERSION: Final = 4
 
 _JOBS_TABLE: Final = """
 CREATE TABLE {name} (
@@ -52,6 +52,14 @@ CREATE TABLE extractions (
 );
 """
 
+# Jobs already reported in a digest, so each one goes out once.
+_DIGEST_SENT_TABLE: Final = """
+CREATE TABLE digest_sent (
+    key     TEXT PRIMARY KEY,
+    sent_at TEXT NOT NULL
+);
+"""
+
 # v1 -> v2: description_text may be NULL (email alerts carry no description). SQLite cannot drop a
 # NOT NULL constraint in place, so the table is rebuilt and the rows copied.
 _MIGRATE_1_TO_2: Final = (
@@ -62,9 +70,10 @@ _MIGRATE_1_TO_2: Final = (
     + _INDEX
 )
 _MIGRATE_2_TO_3: Final = _EXTRACTIONS_TABLE
+_MIGRATE_3_TO_4: Final = _DIGEST_SENT_TABLE
 # The script that takes a database from version N to N + 1.
-_MIGRATIONS: Final[dict[int, str]] = {1: _MIGRATE_1_TO_2, 2: _MIGRATE_2_TO_3}
-_CREATE: Final = _JOBS_TABLE.format(name="jobs") + _INDEX + _EXTRACTIONS_TABLE
+_MIGRATIONS: Final[dict[int, str]] = {1: _MIGRATE_1_TO_2, 2: _MIGRATE_2_TO_3, 3: _MIGRATE_3_TO_4}
+_CREATE: Final = _JOBS_TABLE.format(name="jobs") + _INDEX + _EXTRACTIONS_TABLE + _DIGEST_SENT_TABLE
 
 _JOB_COLUMNS: Final = (
     "source", "slug", "job_id", "company", "title", "location", "url",
@@ -277,6 +286,16 @@ class JobStore:
                     extracted_at = excluded.extracted_at
                 """,
                 (key, extractor, input_hash, fields, input_tokens, output_tokens, _to_db_time(extracted_at)),
+            )
+
+    def digest_sent_keys(self) -> set[str]:
+        return {row["key"] for row in self._db.execute("SELECT key FROM digest_sent")}
+
+    def mark_digest_sent(self, keys: Sequence[str], sent_at: datetime) -> None:
+        now = _to_db_time(sent_at)
+        with self._db:
+            self._db.executemany(
+                "INSERT OR IGNORE INTO digest_sent (key, sent_at) VALUES (?, ?)", [(key, now) for key in keys]
             )
 
     @staticmethod
