@@ -13,8 +13,15 @@ from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
 from jobfinder.alerts import import_alerts
-from jobfinder.config import ConfigError, load_boards
-from jobfinder.digest import DEFAULT_DAYS, collect_answers, render_messages, select_digest
+from jobfinder.config import ConfigError, load_boards, load_watchlist
+from jobfinder.digest import (
+    DEFAULT_DAYS,
+    collect_answers,
+    render_messages,
+    render_watchlist,
+    select_digest,
+    watchlist_due,
+)
 from jobfinder.envfile import secret
 from jobfinder.evaluation import evaluate, extractor_names, render_report
 from jobfinder.extraction import EXTRACTORS, CachedExtractor, ExtractionError, Extractor, build_extractor
@@ -364,6 +371,7 @@ def run_digest(
     days: int,
     dry_run: bool = False,
     poster: Poster | None = None,
+    watchlist_path: Path = Path("data/watchlist.toml"),
 ) -> int:
     """Send what is new since the last digest; `dry_run` prints it instead and marks nothing as sent."""
     if not db_path.exists():
@@ -376,7 +384,8 @@ def run_digest(
     try:
         priorities = load_priorities(priorities_path)
         load_labels(labels_path)
-    except (PrioritiesError, ValueError) as exc:
+        companies = load_watchlist(watchlist_path)
+    except (ConfigError, PrioritiesError, ValueError) as exc:
         print(exc, file=sys.stderr)
         return EXIT_CONFIG_ERROR
     now = datetime.now(tz=UTC)
@@ -392,14 +401,19 @@ def run_digest(
         later = [key for key, answer in store.digest_answers().items() if answer == LATER]
         digest = select_digest(rows, store.digest_sent_keys(), now, days, later)
         messages = render_messages(digest)
+        watchlist = render_watchlist(companies) if watchlist_due(store.last_watchlist_sent(), now) else ""
         if bot is None:
             _replace_unprintable_output()
-            print("\n\n".join(message.text for message in messages) or "Nothing new to send.")
+            texts = [message.text for message in messages] + ([watchlist] if watchlist else [])
+            print("\n\n".join(texts) or "Nothing new to send.")
             return EXIT_OK
         assert chat_id is not None
         for position, message in enumerate(messages):
             bot.send_message(chat_id, message.text, message.buttons, quiet=position > 0)
             store.mark_digest_sent(message.keys, now)
+        if watchlist:
+            bot.send_message(chat_id, watchlist, quiet=bool(messages))
+            store.mark_watchlist_sent(now)
     except FetchError as exc:
         print(f"digest not fully sent: {exc}", file=sys.stderr)
         return EXIT_BOARD_ERRORS
@@ -503,6 +517,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     digest_parser.add_argument("--labels", type=Path, default=Path("data/labels.jsonl"))
     digest_parser.add_argument("--priorities", type=Path, default=Path("priorities.txt"))
     digest_parser.add_argument("--env", type=Path, default=Path(".env"), help="file with the bot token and chat id")
+    digest_parser.add_argument("--watchlist", type=Path, default=Path("data/watchlist.toml"))
     digest_parser.add_argument("--days", type=int, default=DEFAULT_DAYS, help="only jobs first seen in the last N days")
     digest_parser.add_argument("--dry-run", action="store_true", help="print the digest; send and mark nothing")
     digest_parser.add_argument("--find-chat", action="store_true", help="print the chats that wrote to the bot")
@@ -540,7 +555,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.command == "digest":
         if args.find_chat:
             return run_find_chat(args.env)
-        return run_digest(args.db, args.labels, args.priorities, args.env, args.days, args.dry_run)
+        return run_digest(
+            args.db, args.labels, args.priorities, args.env, args.days, args.dry_run, watchlist_path=args.watchlist
+        )
     if args.command == "ui":
         return run_ui(
             args.db, args.labels, args.priorities, args.suggestions, args.prefer, args.seed, args.port,

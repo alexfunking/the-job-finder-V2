@@ -8,6 +8,8 @@ for the next digest.
 
 Each job is its own message with three buttons. Applied and Not relevant also become labels, so the
 daily use keeps growing the eval set. Later brings the job back in the next digest, whatever its age.
+
+Once a week a separate message lists the careers pages of companies no source covers (ADR-007).
 """
 
 from __future__ import annotations
@@ -20,6 +22,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Final, Literal
 
+from jobfinder.config import WatchedCompany
 from jobfinder.http import FetchError
 from jobfinder.labels import Label, append_label
 from jobfinder.matches import MatchRow
@@ -31,6 +34,8 @@ DEFAULT_DAYS: Final = 7
 MAX_ITEMS: Final = 15
 MAX_MAYBES: Final = 5
 MAYBE_MIN_POINTS: Final = 50
+# A little under a week, so a run that starts earlier in the day than last week's still sends it.
+WATCHLIST_EVERY: Final = timedelta(days=6, hours=12)
 
 
 @dataclass(frozen=True, slots=True)
@@ -145,6 +150,18 @@ def render_messages(digest: Digest) -> list[DigestMessage]:
         title += f"\n{digest.waiting} more in the next digest"
     jobs = [DigestMessage(render_item(item), item.keys, _buttons(item.keys[0])) for item in digest.items]
     return [DigestMessage(title, ()), *jobs]
+
+
+def watchlist_due(last_sent: datetime | None, now: datetime) -> bool:
+    return last_sent is None or now - last_sent >= WATCHLIST_EVERY
+
+
+def render_watchlist(companies: Sequence[WatchedCompany]) -> str:
+    """The weekly reminder of the careers pages no source covers; no companies gives an empty text."""
+    if not companies:
+        return ""
+    lines = [f'<a href="{html.escape(company.url)}">{html.escape(company.name)}</a>' for company in companies]
+    return "\n".join(["<b>Weekly check: careers pages with no job feed</b>", *lines])
 
 
 def _apply(press: ButtonPress, store: JobStore, labels_path: Path, now: datetime) -> Answer | None:

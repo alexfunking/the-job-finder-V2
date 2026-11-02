@@ -9,13 +9,16 @@ from fakes import FakePoster
 from test_scoring import PRIORITIES_TOML
 
 from jobfinder.cli import run_digest, run_find_chat
+from jobfinder.config import ConfigError, WatchedCompany, load_watchlist
 from jobfinder.digest import (
     MAX_ITEMS,
     MAX_MAYBES,
     collect_answers,
     render_messages,
+    render_watchlist,
     select_digest,
     short_key,
+    watchlist_due,
 )
 from jobfinder.http import FetchError
 from jobfinder.labels import Label, load_labels
@@ -28,6 +31,11 @@ from jobfinder.telegram import TelegramBot
 NOW = datetime(2026, 11, 2, 8, tzinfo=UTC)
 OK = {"ok": True, "result": {}}
 NO_UPDATES = {"ok": True, "result": []}
+WATCHLIST_TOML = """
+[[company]]
+name = "Acme"
+url = "https://example.test/"
+"""
 
 
 def job(job_id: str, title: str, company: str = "Acme", location: str = "Tel Aviv") -> Job:
@@ -155,8 +163,9 @@ def test_sending_marks_jobs_and_a_second_run_sends_nothing(
     monkeypatch.delenv("TELEGRAM_CHAT_ID", raising=False)
     db, labels, priorities, env = files
     poster = FakePoster(NO_UPDATES, OK, OK, NO_UPDATES)
-    assert run_digest(db, labels, priorities, env, 7, poster=poster) == 0
-    assert run_digest(db, labels, priorities, env, 7, poster=poster) == 0
+    none = db.parent / "none.toml"
+    assert run_digest(db, labels, priorities, env, 7, poster=poster, watchlist_path=none) == 0
+    assert run_digest(db, labels, priorities, env, 7, poster=poster, watchlist_path=none) == 0
     assert [url.rsplit("/", 1)[1] for url, _, _ in poster.requests] == [
         "getUpdates", "sendMessage", "sendMessage", "getUpdates",
     ]
@@ -270,6 +279,52 @@ def test_not_relevant_wins_over_later(priorities: Priorities) -> None:
     label = Label(verdict="no_fit", reason="no", labeled_at=NOW, job=a_job)
     rows = rows_for([a_job], priorities, {a_job.key: label})
     assert select_digest(rows, {a_job.key}, NOW, later=[a_job.key]).items == ()
+
+
+def test_watchlist_is_due_when_never_sent_or_about_a_week_ago() -> None:
+    assert watchlist_due(None, NOW)
+    assert not watchlist_due(NOW - timedelta(days=6), NOW)
+    assert watchlist_due(NOW - timedelta(days=6, hours=13), NOW)
+
+
+def test_watchlist_text_escapes_and_an_empty_list_gives_nothing() -> None:
+    text = render_watchlist([WatchedCompany(name="A&B", url="https://example.test/?a=1&b=2")])
+    assert '<a href="https://example.test/?a=1&amp;b=2">A&amp;B</a>' in text
+    assert render_watchlist([]) == ""
+
+
+def test_load_watchlist_reads_the_file_and_refuses_a_plain_http_link(tmp_path: Path) -> None:
+    path = tmp_path / "watchlist.toml"
+    assert load_watchlist(path) == []
+    path.write_text(WATCHLIST_TOML, encoding="utf-8")
+    assert load_watchlist(path) == [WatchedCompany(name="Acme", url="https://example.test/")]
+    path.write_text(WATCHLIST_TOML.replace("https:", "http:"), encoding="utf-8")
+    with pytest.raises(ConfigError):
+        load_watchlist(path)
+
+
+def test_the_repo_watchlist_loads() -> None:
+    assert len(load_watchlist(Path("data/watchlist.toml"))) >= 10
+
+
+def test_watchlist_goes_out_once_and_is_retried_after_a_failure(
+    files: tuple[Path, Path, Path, Path], tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("TELEGRAM_BOT_TOKEN", raising=False)
+    monkeypatch.delenv("TELEGRAM_CHAT_ID", raising=False)
+    db, labels, priorities, env = files
+    watchlist = tmp_path / "watchlist.toml"
+    watchlist.write_text(WATCHLIST_TOML, encoding="utf-8")
+
+    failing = FakePoster(NO_UPDATES, OK, OK, FetchError("HTTP 500"))
+    assert run_digest(db, labels, priorities, env, 7, poster=failing, watchlist_path=watchlist) == 1
+
+    retried = FakePoster(NO_UPDATES, OK, NO_UPDATES)
+    assert run_digest(db, labels, priorities, env, 7, poster=retried, watchlist_path=watchlist) == 0
+    assert run_digest(db, labels, priorities, env, 7, poster=retried, watchlist_path=watchlist) == 0
+    methods = [url.rsplit("/", 1)[1] for url, _, _ in retried.requests]
+    assert methods == ["getUpdates", "sendMessage", "getUpdates"]
+    assert "Acme" in str(retried.requests[1][1])
 
 
 def test_find_chat_prints_each_chat_once(

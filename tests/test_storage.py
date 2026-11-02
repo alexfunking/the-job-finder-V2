@@ -171,7 +171,7 @@ def test_v1_database_is_migrated_keeping_its_rows(tmp_path: Path) -> None:
     store.record_sightings([job("2").model_copy(update={"description_text": None})], T2)
     assert store.count() == 2
     store.close()
-    assert sqlite3.connect(path).execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION == 5
+    assert sqlite3.connect(path).execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION == 6
     assert JobStore.open(path).get_extraction("greenhouse:acme:1", "x", "h") is None  # v3 table exists
 
 

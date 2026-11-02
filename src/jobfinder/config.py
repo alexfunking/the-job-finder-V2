@@ -1,11 +1,11 @@
-"""The list of boards to scan, read from a hand-maintained TOML file (data/sources.toml)."""
+"""Hand-maintained TOML lists: the boards to scan (data/sources.toml) and the watchlist (data/watchlist.toml)."""
 
 from __future__ import annotations
 
 import tomllib
 from pathlib import Path
 
-from pydantic import BaseModel, ConfigDict, ValidationError
+from pydantic import BaseModel, ConfigDict, ValidationError, field_validator
 
 from jobfinder.models import KeyPart, NonEmptyStr
 from jobfinder.sources import SOURCES
@@ -25,6 +25,35 @@ class Board(BaseModel):
     @property
     def label(self) -> str:
         return f"{self.source}:{self.slug}"
+
+
+class WatchedCompany(BaseModel):
+    """A company with no public job API: the user checks its careers page by hand (ADR-007)."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid", str_strip_whitespace=True)
+
+    name: NonEmptyStr
+    url: NonEmptyStr
+
+    @field_validator("url")
+    @classmethod
+    def _require_https_url(cls, value: str) -> str:
+        if not value.startswith("https://"):
+            raise ValueError("url must start with https://")
+        return value
+
+
+def load_watchlist(path: Path) -> list[WatchedCompany]:
+    """The companies in the watchlist file; a missing file means none."""
+    if not path.exists():
+        return []
+    try:
+        entries = tomllib.loads(path.read_text(encoding="utf-8")).get("company", [])
+        return [WatchedCompany.model_validate(entry) for entry in entries]
+    except tomllib.TOMLDecodeError as exc:
+        raise ConfigError(f"{path}: invalid TOML: {exc}") from exc
+    except ValidationError as exc:
+        raise ConfigError(f"{path}: {exc.errors()[0]['msg']}") from exc
 
 
 def load_boards(path: Path) -> list[Board]:

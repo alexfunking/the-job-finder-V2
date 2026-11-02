@@ -15,7 +15,7 @@ from typing import Final
 
 from jobfinder.models import Job
 
-SCHEMA_VERSION: Final = 5
+SCHEMA_VERSION: Final = 6
 LATER: Final = "later"  # the digest answer that asks to see a job again
 
 _JOBS_TABLE: Final = """
@@ -70,6 +70,13 @@ CREATE TABLE digest_answers (
 );
 """
 
+# One row per weekly watchlist message that was delivered.
+_WATCHLIST_SENT_TABLE: Final = """
+CREATE TABLE watchlist_sent (
+    sent_at TEXT PRIMARY KEY
+);
+"""
+
 # v1 -> v2: description_text may be NULL (email alerts carry no description). SQLite cannot drop a
 # NOT NULL constraint in place, so the table is rebuilt and the rows copied.
 _MIGRATE_1_TO_2: Final = (
@@ -82,12 +89,14 @@ _MIGRATE_1_TO_2: Final = (
 _MIGRATE_2_TO_3: Final = _EXTRACTIONS_TABLE
 _MIGRATE_3_TO_4: Final = _DIGEST_SENT_TABLE
 _MIGRATE_4_TO_5: Final = _DIGEST_ANSWERS_TABLE
+_MIGRATE_5_TO_6: Final = _WATCHLIST_SENT_TABLE
 # The script that takes a database from version N to N + 1.
 _MIGRATIONS: Final[dict[int, str]] = {
-    1: _MIGRATE_1_TO_2, 2: _MIGRATE_2_TO_3, 3: _MIGRATE_3_TO_4, 4: _MIGRATE_4_TO_5,
+    1: _MIGRATE_1_TO_2, 2: _MIGRATE_2_TO_3, 3: _MIGRATE_3_TO_4, 4: _MIGRATE_4_TO_5, 5: _MIGRATE_5_TO_6,
 }
 _CREATE: Final = (
     _JOBS_TABLE.format(name="jobs") + _INDEX + _EXTRACTIONS_TABLE + _DIGEST_SENT_TABLE + _DIGEST_ANSWERS_TABLE
+    + _WATCHLIST_SENT_TABLE
 )
 
 _JOB_COLUMNS: Final = (
@@ -325,6 +334,14 @@ class JobStore:
                 """,
                 (key, answer, _to_db_time(answered_at)),
             )
+
+    def last_watchlist_sent(self) -> datetime | None:
+        value: str | None = self._db.execute("SELECT MAX(sent_at) FROM watchlist_sent").fetchone()[0]
+        return _from_db_time(value) if value else None
+
+    def mark_watchlist_sent(self, sent_at: datetime) -> None:
+        with self._db:
+            self._db.execute("INSERT OR IGNORE INTO watchlist_sent (sent_at) VALUES (?)", (_to_db_time(sent_at),))
 
     def digest_answers(self) -> dict[str, str]:
         return {row["key"]: row["answer"] for row in self._db.execute("SELECT key, answer FROM digest_answers")}

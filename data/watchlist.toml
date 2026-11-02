@@ -1,0 +1,50 @@
+# Large employers with no public job API (ADR-007). `jobfinder digest` sends these links once a week.
+# Edit by hand; a company that moves to a board in sources.toml comes off this list.
+
+[[company]]
+name = "Wix"
+url = "https://careers.wix.com/positions?location=Israel"
+
+[[company]]
+name = "Fiverr"
+url = "https://www.fiverr.com/jobs"
+
+[[company]]
+name = "Mobileye"
+url = "https://careers.mobileye.com/jobs"
+
+[[company]]
+name = "Check Point"
+url = "https://careers.checkpoint.com/"
+
+[[company]]
+name = "Palo Alto Networks and CyberArk"
+url = "https://jobs.paloaltonetworks.com/en/search-jobs/Israel"
+
+[[company]]
+name = "Amdocs"
+url = "https://jobs.amdocs.com/careers?location=Israel"
+
+[[company]]
+name = "Intel"
+url = "https://intel.wd1.myworkdayjobs.com/External"
+
+[[company]]
+name = "NVIDIA"
+url = "https://nvidia.wd5.myworkdayjobs.com/NVIDIAExternalCareerSite"
+
+[[company]]
+name = "Microsoft"
+url = "https://apply.careers.microsoft.com/careers"
+
+[[company]]
+name = "Google"
+url = "https://www.google.com/about/careers/applications/jobs/results/?location=Israel"
+
+[[company]]
+name = "Apple"
+url = "https://jobs.apple.com/en-il/search?location=israel-ISR"
+
+[[company]]
+name = "Elbit Systems"
+url = "https://elbitsystemscareer.com/"

@@ -72,6 +72,8 @@ Sends the jobs first seen in the last 7 days (`--days`) that were never sent: up
 
 Each job is its own message with three buttons. **Applied** and **Not relevant** are saved and added to `data/labels.jsonl`, so daily use grows the eval set; **Later** brings the job back in the next digest, whatever its age. No process stays up: each `jobfinder digest` first reads the presses since the last run and then replaces the buttons of each answered job with what you chose, so a press shows no effect until then. Telegram keeps presses for 24 hours; one that is lost can simply be pressed again. Only presses from `TELEGRAM_CHAT_ID` count.
 
+About once a week the digest also sends the careers pages in `data/watchlist.toml`: large employers with no public job API, to check by hand. They are links for you to open; nothing fetches them. Edit the file to add or remove companies. A few links can filter to Israel, and the rest open the company's full list.
+
 To set it up, create a bot with @BotFather in Telegram and put its token in `.env` as `TELEGRAM_BOT_TOKEN`. Send the bot any message, run `uv run jobfinder digest --find-chat`, and put the number it prints in `.env` as `TELEGRAM_CHAT_ID`.
 
 ## Measure the pipeline
