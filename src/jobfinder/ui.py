@@ -158,7 +158,9 @@ def serve(
     def payload() -> dict[str, object]:
         return build_payload(db_path, labels_path, priorities_path, prefer, datetime.now(tz=UTC))
 
-    desk = LabelDesk(db_path, labels_path, suggestions_path, seed, lambda: datetime.now(tz=UTC))
+    desk = LabelDesk(
+        db_path, labels_path, suggestions_path, seed, lambda: datetime.now(tz=UTC), priorities_path, prefer
+    )
     server = ThreadingHTTPServer((HOST, port), make_handler(payload, desk, secrets.token_urlsafe(32)))
     url = f"http://{HOST}:{server.server_port}/"
     print(f"Job matches at {url}  -  label jobs at {url}label  (Ctrl-C to stop)")

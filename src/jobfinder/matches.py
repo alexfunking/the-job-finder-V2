@@ -11,11 +11,12 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 
+from jobfinder.evaluation import STUDENT_WORDS
 from jobfinder.extraction import Extraction
 from jobfinder.extraction.base import input_hash
 from jobfinder.filtering import prefilter
 from jobfinder.labels import Label
-from jobfinder.scoring import Priorities, Score, Verdict, score_job
+from jobfinder.scoring import Priorities, Score, Verdict, find_word, score_job
 from jobfinder.storage import JobStore, StoredJob
 
 VERDICT_ORDER: dict[Verdict, int] = {Verdict.MATCH: 0, Verdict.MAYBE: 1, Verdict.NO: 2}
@@ -88,6 +89,16 @@ def match_rows(
 
 def _newest_first(stored: StoredJob) -> float:
     return -stored.first_seen.timestamp()
+
+
+def unchecked_keys(rows: Sequence[MatchRow]) -> set[str]:
+    """Unlabeled matches and student jobs: the labels that test the two goals on jobs the tuning never saw."""
+    return {
+        row.stored.job.key
+        for row in rows
+        if row.label is None
+        and (row.score.verdict == Verdict.MATCH or find_word(STUDENT_WORDS, row.stored.job.title) is not None)
+    }
 
 
 def summary_counts(rows: Sequence[MatchRow]) -> dict[str, int]:

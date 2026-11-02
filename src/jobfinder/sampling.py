@@ -11,7 +11,7 @@ rejects are still sampled, so the eval set can catch the filter's mistakes.
 from __future__ import annotations
 
 import random
-from collections.abc import Iterable, Mapping
+from collections.abc import Collection, Iterable, Mapping
 from enum import StrEnum
 from typing import Final
 
@@ -88,9 +88,13 @@ def labeling_queue(
 
 
 def review_queue(
-    candidates: Iterable[Job], labeled: Mapping[str, Label], suggestions: Mapping[str, Suggestion], seed: int
+    candidates: Iterable[Job],
+    labeled: Mapping[str, Label],
+    suggestions: Mapping[str, Suggestion],
+    seed: int,
+    first: Collection[str] = (),
 ) -> list[Job]:
-    """`labeling_queue`, with the jobs that have a suggestion first (they were picked to be reviewed)."""
+    """`labeling_queue`, with the keys in `first`, then the jobs that have a suggestion, ahead of the rest."""
     queue = labeling_queue(candidates, labeled, seed)
-    queue.sort(key=lambda job: job.key not in suggestions)
+    queue.sort(key=lambda job: (job.key not in first, job.key not in suggestions))
     return queue

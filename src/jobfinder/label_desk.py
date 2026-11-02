@@ -7,7 +7,7 @@ records what was suggested, so the terminal tool and this screen can be mixed fr
 from __future__ import annotations
 
 import threading
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from datetime import datetime
 from pathlib import Path
 from typing import Final
@@ -16,8 +16,10 @@ from pydantic import ValidationError
 
 from jobfinder.labeling import MIN_FIT_LABELS, tally
 from jobfinder.labels import Label, Suggestion, append_label, load_labels, load_suggestions
+from jobfinder.matches import match_rows, unchecked_keys
 from jobfinder.models import Job
 from jobfinder.sampling import review_queue
+from jobfinder.scoring import load_priorities
 from jobfinder.storage import JobStore
 
 # Enough for a long session; a reload continues from the labels already saved.
@@ -43,9 +45,10 @@ def progress(labels: Mapping[str, Label]) -> dict[str, int]:
     }
 
 
-def _item(job: Job, suggestion: Suggestion | None) -> dict[str, object]:
+def _item(job: Job, suggestion: Suggestion | None, to_check: bool) -> dict[str, object]:
     return {
         "key": job.key,
+        "to_check": to_check,
         "title": job.title,
         "company": job.company,
         "location": job.location,
@@ -57,27 +60,40 @@ def _item(job: Job, suggestion: Suggestion | None) -> dict[str, object]:
 
 class LabelDesk:
     def __init__(
-        self, db_path: Path, labels_path: Path, suggestions_path: Path, seed: int, now: Callable[[], datetime]
+        self,
+        db_path: Path,
+        labels_path: Path,
+        suggestions_path: Path,
+        seed: int,
+        now: Callable[[], datetime],
+        priorities_path: Path | None = None,
+        prefer: Sequence[str] = (),
     ) -> None:
         self._db_path = db_path
         self._labels_path = labels_path
         self._suggestions_path = suggestions_path
         self._seed = seed
         self._now = now
+        self._priorities_path = priorities_path
+        self._prefer = prefer
         self._lock = threading.Lock()  # the server is threaded, and each answer appends to one file
 
     def state(self) -> dict[str, object]:
-        """The next jobs to label, in the order `jobfinder label` offers them, and the progress so far."""
+        """The next jobs to label and the progress so far: unchecked matches first, then `jobfinder label`'s order."""
         labels = load_labels(self._labels_path)
         suggestions = load_suggestions(self._suggestions_path)
         store = JobStore.open(self._db_path)
         try:
             candidates = [stored.job for stored in store.open_jobs()]
+            first: set[str] = set()
+            if self._priorities_path is not None:
+                priorities = load_priorities(self._priorities_path)
+                first = unchecked_keys(match_rows(store, priorities, labels, self._prefer))
         finally:
             store.close()
-        queue = review_queue(candidates, labels, suggestions, self._seed)
+        queue = review_queue(candidates, labels, suggestions, self._seed, first)
         return {
-            "items": [_item(job, suggestions.get(job.key)) for job in queue[:MAX_ITEMS]],
+            "items": [_item(job, suggestions.get(job.key), job.key in first) for job in queue[:MAX_ITEMS]],
             "progress": progress(labels),
         }
 

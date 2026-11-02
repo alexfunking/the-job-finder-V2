@@ -9,7 +9,7 @@ import sys
 import time
 import webbrowser
 from collections.abc import Mapping, Sequence
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
 from jobfinder.alerts import import_alerts
@@ -321,7 +321,7 @@ def _print_extractions(extractor: Extractor, jobs: Sequence[Job]) -> int:
     return EXIT_BOARD_ERRORS if failed else EXIT_OK
 
 
-def run_eval(db_path: Path, labels_path: Path, priorities_path: Path) -> int:
+def run_eval(db_path: Path, labels_path: Path, priorities_path: Path, since: date | None = None) -> int:
     """Compare the pipeline with the labels, once per extractor and once from the titles alone."""
     if not db_path.exists():
         print(f"no job database at {db_path}: run `jobfinder scan` first", file=sys.stderr)
@@ -339,9 +339,10 @@ def run_eval(db_path: Path, labels_path: Path, priorities_path: Path) -> int:
     store = JobStore.open(db_path)
     try:
         reports = [
-            render_report(name, evaluate(labels, store, priorities, name)) for name in extractor_names(labels, store)
+            render_report(name, evaluate(labels, store, priorities, name), since)
+            for name in extractor_names(labels, store)
         ]
-        reports.append(render_report("titles alone", evaluate(labels, store, priorities, None)))
+        reports.append(render_report("titles alone", evaluate(labels, store, priorities, None), since))
     finally:
         store.close()
     print("\n\n".join(reports))
@@ -419,7 +420,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     eval_parser.add_argument("--db", type=Path, default=Path("data/jobs.db"))
     eval_parser.add_argument("--labels", type=Path, default=Path("data/labels.jsonl"))
     eval_parser.add_argument("--priorities", type=Path, default=Path("priorities.txt"))
-    ui_parser = commands.add_parser("ui", help="show the scored jobs in a local web page")
+    eval_parser.add_argument(
+        "--since", type=date.fromisoformat, help="also report the labels answered from this day on (YYYY-MM-DD)"
+    )
+    ui_parser =commands.add_parser("ui", help="show the scored jobs in a local web page")
     ui_parser.add_argument("--db", type=Path, default=Path("data/jobs.db"))
     ui_parser.add_argument("--labels", type=Path, default=Path("data/labels.jsonl"))
     ui_parser.add_argument("--priorities", type=Path, default=Path("priorities.txt"))
@@ -449,7 +453,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             all_kept=args.all,
         )
     if args.command == "eval":
-        return run_eval(args.db, args.labels, args.priorities)
+        return run_eval(args.db, args.labels, args.priorities, args.since)
     if args.command == "ui":
         return run_ui(
             args.db, args.labels, args.priorities, args.suggestions, args.prefer, args.seed, args.port,

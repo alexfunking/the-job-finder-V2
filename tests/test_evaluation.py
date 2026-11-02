@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -120,6 +120,19 @@ def test_report_separates_bulk_labels(store: JobStore, priorities: Priorities) -
     report = render_report("titles alone", evaluate({item.key: item for item in labels}, store, priorities, None))
     assert "all labels: 2 labels, 2 fit" in report
     assert "answered one at a time: 1 labels, 1 fit" in report
+
+
+def test_report_can_show_only_the_answers_since_a_day(store: JobStore, priorities: Priorities) -> None:
+    newer = T1 + timedelta(days=3)
+    labels = [
+        label(job("1", "Junior Software Engineer"), "fit"),
+        label(job("2", "Junior Data Analyst"), "fit", bulk=True).model_copy(update={"labeled_at": newer}),
+        label(job("3", "Junior Data Engineer"), "no_fit").model_copy(update={"labeled_at": newer}),
+    ]
+    rows = evaluate({item.key: item for item in labels}, store, priorities, None)
+    report = render_report("titles alone", rows, newer.date())
+    assert "answered since 2026-11-02: 1 labels, 0 fit" in report
+    assert "answered since" not in render_report("titles alone", rows)
 
 
 def test_accept_suggestions_keeps_answers_and_marks_the_rest(tmp_path: Path) -> None:

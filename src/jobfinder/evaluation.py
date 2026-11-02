@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
+from datetime import date
 from typing import Final
 
 from jobfinder.extraction import Extraction
@@ -116,13 +117,21 @@ def render_mistakes(rows: Iterable[EvalRow]) -> list[str]:
     return lines
 
 
-def render_report(name: str, rows: Sequence[EvalRow]) -> str:
+def render_report(name: str, rows: Sequence[EvalRow], since: date | None = None) -> str:
+    """The report for one extractor; `since` adds a group of the labels answered from that day on.
+
+    That group is the check on jobs the tuning did not see, so only its precision means much: the label
+    screen offers unchecked matches first, so a fit job scored as a no is rarely answered there.
+    """
     by_hand = [row for row in rows if not row.label.bulk_accepted]
     title_only = sum(1 for row in rows if row.outcome != FILTERED and not row.read)
     lines = [f"{name}: {title_only} kept jobs scored from the title alone"]
     lines.extend(render_group("all labels", rows))
     if len(by_hand) != len(rows):
         lines.extend(render_group("answered one at a time", by_hand))
+    if since is not None:
+        recent = [row for row in by_hand if row.label.labeled_at.date() >= since]
+        lines.extend(render_group(f"answered since {since.isoformat()}", recent))
     mistakes = render_mistakes(rows)
     if mistakes:
         lines.extend(["", "Mistakes:", *mistakes])

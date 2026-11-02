@@ -1,14 +1,14 @@
 # Status — read this first in a new session
 
-Last updated: 2026-10-28. Update this file at the end of every working session.
+Last updated: 2026-11-02. Update this file at the end of every working session.
 
 Source of truth for the plan: Obsidian vault `~/Vault/02_Projects/Jarvis/Jarvis - Roadmap.md`.
-Design and ADRs: `~/Vault/02_Projects/Job Finder/Job Finder - Architecture.md` (ADR-001 to ADR-007).
+Design and ADRs: `~/Vault/02_Projects/Job Finder/Job Finder - Architecture.md` (ADR-001 to ADR-008).
 
 ## Where we are
-**Phase 2 (measurable scoring), steps 1–4 of 7, plus a new source: LinkedIn job alerts by email.** The labeling tool, the deterministic pre-filter, `jobfinder alerts` and the extractors (Gemini and Ollama, `jobfinder extract`) are built; the hand-labeled eval set is in progress (the user started labeling on 2026-10-28), so nothing is measured yet.
+**Phase 2 (measurable scoring), all 7 steps built; the blind check on 2026-11-02 meets G1 (see "Blind check" below).** Everything up to the matches page runs daily: collection, pre-filter, reading with the local model, scoring, `jobfinder ui`, `jobfinder eval`. Phase 3 (Telegram digest) is next.
 
-Repo: https://github.com/alexfunking/the-job-finder-V2 (public), `main` tracks `origin/main` ; check `git status -sb` for what is pushed. 328 tests pass, `mypy --strict` clean.
+Repo: https://github.com/alexfunking/the-job-finder-V2 (public), `main` tracks `origin/main` ; check `git status -sb` for what is pushed. 330 tests pass, `mypy --strict` clean.
 
 **Daily run (since 2026-10-28):** Windows Task Scheduler task `job-finder daily scan` runs `scripts/daily.cmd` at 08:00 (or as soon as possible after a missed start): `jobfinder scan`, then `jobfinder alerts --days 3`, then (since 2026-10-30) `jobfinder extract --all --extractor ollama`. Output is appended to `data/logs/daily.log` (gitignored); the extraction's job list is in `data/logs/extract.log`, latest run only. Ollama starts at login, so if the run happens before login the extract step fails and the next run catches up: look for `extract 1` on the log's exit line. Check that log to verify closing / reopening across days.
 
@@ -31,22 +31,26 @@ Repo: https://github.com/alexfunking/the-job-finder-V2 (public), `main` tracks `
 
 **Scoring tuned (2026-10-30):** three code fixes in `scoring.py`: `years_required` 0 no longer proves an entry-level job (all 5 such non-entry postings stated no years, so 0 is what the model writes for "not stated"); a job with 0 field points is a maybe, never a match; a word before a loose hyphen now counts ("Student- Glil Yam"). `priorities.txt` gained reject words (biz ops, security analyst, SOC, MLOps, solution / solutions engineer, forward deployed, career path) and field words (SW, AI engineer, automation engineer). Live list: 71 matches became 49, 8 InfinityLabs "career path" jobs are now rejected on one guessed label. Eval on the 126 labels: precision 100% (27/27), match recall 93%, match or maybe 100%, student recall 100% (6/6). These numbers are on the labels the tuning was based on, so they do not prove the goals: judge the next new jobs instead.
 
+**Blind check (2026-11-02):** only 10 jobs arrived after the tuning (1 match), too few to measure, so the check used the 23 live matches that had no label plus 2 unlabeled student jobs. `/label` now offers those first, with no suggestion shown, and `jobfinder eval --since 2026-11-02` reports them apart. Result with the live pipeline (Ollama where it read the job): precision 96% (22/23), or 94% (17/18) counting duplicates once, so G1 holds. Student jobs: of 3 unlabeled, 1 fit and shown, 2 not the user's field; every student title now open has a label, 7 of 7 fit ones shown, 6 of them bulk accepted, so G2 has little individual evidence. This check is easy for the scorer: 49 of the 50 live matches have "junior" or "student" in the title and no model answer behind them. The one match the model decided is the one mistake: Taboola Fraud Analyst, which asks "1-2 years"; the model correctly gave the minimum, 1, and the user judged it too senior. So G1 says little about the extractor, and comparing Gemini with Ollama would barely change the matches. What the model could change is hidden in the 373 maybes, which nobody has measured.
+
 ## Next steps
 1. **Done (2026-10-30):** suggestions reviewed and approved. Labeling more jobs one at a time at `/label` is what would make the eval trustworthy.
 2. **Done (2026-10-28):** deterministic pre-filter, `jobfinder filter` (`filtering.py`). Location must name a place in Israel (unplaced "Remote" is kept); senior title words rejected unless student / intern / junior. Does not read the description. On the real DB: 162 of 1,450 open jobs kept. Measure it once labels exist: "fit, rejected" must be 0.
 3. **Done (2026-10-28):** `Extractor` interface and `jobfinder extract`.
 4. **Done (2026-10-28):** `GeminiExtractor` and `OllamaExtractor` — ADR-006. **Done (2026-10-28):** extractions are cached in the `extractions` table (DB schema v3), keyed by job and extractor and checked against a hash of the prompt and the posting (`CachedExtractor`). Backup of the v2 DB: `data/jobs.v2-backup.db`. **Next in code:** `jobfinder eval`. Consider lowering Gemini's thinking to cut output tokens, but only if the eval says accuracy holds. For now the API one is **Gemini**: the key is in `.env` as `GEMINI_API_KEY` (gitignored, verified 2026-10-28 by listing models). Claude Haiku 5.5 is added later as another implementation, so keep the interface provider-neutral. Pick by eval: go local if within 3–5 precision points.
 5. **Done (2026-10-28):** score computed in code from `priorities.txt` (`scoring.py`).
-6. **Done (2026-10-30):** `jobfinder eval`. Phase 2 is done when goals G1 and G2 hold on the eval set; the numbers above do not prove that yet. Scoring is tuned (see above). Next: check precision on jobs the tuning did not see, and run Gemini on the labeled jobs to compare it with Ollama.
+6. **Done (2026-10-30):** `jobfinder eval`. Phase 2 is done when goals G1 and G2 hold on the eval set. **Done (2026-11-02):** blind check on jobs the tuning did not see (see above): G1 holds, G2 has little individual evidence. Comparing Gemini with Ollama is left until the maybes are looked at.
 7. Then Phase 3: daily Telegram digest, including a weekly watchlist of careers pages for companies without an API (ADR-007), and grouping of logical duplicates (same company + title + location, 16 groups seen).
 
 ## Open tasks on the user's side
 - Review the draft `priorities.txt` (gitignored, written 2026-10-28 from the CV): fit = student / intern, or junior asking 0-1 years; fields data / BI / analyst and software development; location anywhere in the Center (Netanya marked as too far, to confirm) or remote; up to 3 office days preferred, more only lowers the score.
-- Label the eval set (above).
 - Create an account at console.anthropic.com, load credit, create an API key (no longer blocking: Gemini is used meanwhile).
 - Archive the old repo `alexfunking/The_job_Finder`.
 
 ## Known gaps
+- The daily run of 2026-11-01 started at 09:14 and logged nothing after its header, not even the exit line. Cause unknown: Task Scheduler history is off, and the system log shows only a shutdown at 12:33. The next run was fine, and the task has a 30-minute limit. Watch for a header with no `exit:` line.
+- A posting asking "1-2 years" counts as 1, because `years_required` is the minimum. The user judged such a job too senior (Taboola Fraud Analyst). Telling them apart needs the top of the range from the extractor.
+- The 373 maybes are unmeasured: a job with no "junior" in the title and no years stated stays a maybe, so the digest needs a rule for which maybes to show.
 - Alert jobs never close (an alert lists only new jobs). Phase 3 must show only recently first-seen alert jobs, or expire them by age.
 - Alert jobs have no description, so the extractor and scoring work from the title only for them.
 - Only LinkedIn alerts are parsed. AllJobs / Drushim alerts need their own parser once the user subscribes them to the same mailbox.

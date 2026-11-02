@@ -20,6 +20,27 @@ from jobfinder.ui import make_handler, render_label_page
 
 T1 = datetime(2026, 10, 30, 8, tzinfo=UTC)
 TOKEN = "test-token"
+PRIORITIES_TOML = """
+[profile]
+skills = ["Python"]
+
+[role]
+max_years = 1
+entry_title_words = ["student", "junior"]
+field_title_words = ["data", "software"]
+reject_title_words = ["sales"]
+
+[location]
+accept = ["Tel Aviv"]
+low_priority = ["Netanya"]
+reject = ["Haifa"]
+
+[onsite]
+preferred_max_days = 3
+
+[score]
+match_threshold = 50
+"""
 
 
 def job(job_id: str, title: str = "Backend Engineer") -> Job:
@@ -64,6 +85,33 @@ def test_state_lists_suggested_jobs_first_with_their_suggestion(desk: LabelDesk)
     assert items[0]["key"] == job("3").key
     assert items[0]["suggestion"] == {"verdict": "fit", "reason": "junior, Tel Aviv"}
     assert items[1]["suggestion"] is None
+
+
+def test_unchecked_matches_and_student_jobs_come_first_without_a_suggestion(tmp_path: Path) -> None:
+    db = tmp_path / "jobs.db"
+    store = JobStore.open(db)
+    jobs = [job("1"), job("2", "Junior Software Engineer"), job("3"), job("4", "Marketing Student")]
+    store.record_board("greenhouse", "acme", jobs, T1)
+    store.close()
+    suggestions = tmp_path / "suggestions.jsonl"
+    suggestions.write_text(suggestion("3", "fit", "r").model_dump_json() + "\n", encoding="utf-8")
+    priorities = tmp_path / "priorities.txt"
+    priorities.write_text(PRIORITIES_TOML, encoding="utf-8")
+    desk = LabelDesk(db, tmp_path / "labels.jsonl", suggestions, seed=1, now=lambda: T1, priorities_path=priorities)
+
+    def queue() -> list[object]:
+        items = desk.state()["items"]
+        assert isinstance(items, list)
+        return items
+
+    first_two = queue()[:2]
+    assert {item["key"] for item in first_two} == {job("2").key, job("4").key}  # type: ignore[index]
+    assert all(item["suggestion"] is None for item in first_two)  # type: ignore[index]
+    assert [item["to_check"] for item in queue()] == [True, True, False, False]  # type: ignore[index]
+
+    desk.record(job("2").key, "fit", "right level")
+    desk.record(job("4").key, "no_fit", "wrong field")
+    assert queue()[0]["key"] == job("3").key  # type: ignore[index]
 
 
 def test_accepting_a_suggestion_keeps_its_reason_and_records_it(desk: LabelDesk, tmp_path: Path) -> None:

@@ -37,7 +37,7 @@ Register-ScheduledTask -TaskName 'job-finder daily scan' `
 ```bash
 uv run jobfinder ui      # then open http://127.0.0.1:8765/label
 ```
-A screen in the local page shows one job at a time with its suggested label. Press Enter to accept the suggestion, `Y` (fit) or `N` (not fit) to give your own answer with a reason, `S` to skip, `B` to go back and `O` to open the posting; every action also has a button. Each answer is saved at once, and answering a job again replaces the earlier answer. Saving needs a token that only this server's own page receives, so another website cannot write labels through your browser.
+A screen in the local page shows one job at a time. Current matches and student jobs with no label come first, with no suggestion, so they can be judged blind; after them come the jobs with a suggested label. Press Enter to accept a suggestion, `Y` (fit) or `N` (not fit) to give your own answer with a reason, `S` to skip, `B` to go back and `O` to open the posting; every action also has a button. Each answer is saved at once, and answering a job again replaces the earlier answer. Saving needs a token that only this server's own page receives, so another website cannot write labels through your browser.
 
 The same labeling works in the terminal, and both write the same file:
 ```bash
@@ -66,8 +66,9 @@ Runs an extractor on the first jobs of the labeling order and prints what it rea
 ## Measure the pipeline
 ```bash
 uv run jobfinder eval
+uv run jobfinder eval --since 2026-11-02   # also report the answers from that day on
 ```
-Runs every fit / not-fit label through the pre-filter and scoring, once per extractor with saved answers and once from the titles alone, and prints precision of "match", recall and student recall against the goals (85% and 90%), then every wrong match and missed fit. Nothing is sent to a model, so a job the extractor has not read is scored from its title.
+Runs every fit / not-fit label through the pre-filter and scoring, once per extractor with saved answers and once from the titles alone, and prints precision of "match", recall and student recall against the goals (85% and 90%), then every wrong match and missed fit. Nothing is sent to a model, so a job the extractor has not read is scored from its title. With `--since`, a group shows the labels answered from that day on; only its precision means much, because the label screen offers current matches first.
 
 `uv run jobfinder label --accept-rest` saves every unanswered suggestion as a label, marked `bulk_accepted`. Use it only when you approve the suggestions as a batch. The eval reports the labels answered one at a time separately, because bulk labels were never looked at individually.
 

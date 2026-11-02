@@ -114,9 +114,9 @@ const answers = new Map();
 function show(node, visible) { node.classList.toggle("hidden", !visible); }
 
 function bar() {
-  const left = items.slice(index).filter(item => item.suggestion && !answers.has(item.key)).length;
+  const left = items.slice(index).filter(item => (item.to_check || item.suggestion) && !answers.has(item.key)).length;
   const fitNote = stats.fit < stats.min_fit ? ` (${stats.min_fit} needed)` : "";
-  const reviewed = left ? `${left} suggestions left` : "no suggestions left";
+  const reviewed = left ? `${left} left to check` : "nothing left to check";
   $("stats").textContent = `${stats.done} labeled · ${stats.fit} fit${fitNote} · ${stats.no_fit} not fit · ${reviewed}`;
   const total = stats.done + left;
   $("fill").style.width = total ? `${100 * stats.done / total}%` : "0";
