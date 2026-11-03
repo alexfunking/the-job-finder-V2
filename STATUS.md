@@ -10,7 +10,7 @@ Design and ADRs: `~/Vault/02_Projects/Job Finder/Job Finder - Architecture.md` (
 
 Repo: https://github.com/alexfunking/the-job-finder-V2 (public), `main` tracks `origin/main` ; check `git status -sb` for what is pushed. 361 tests pass, `mypy --strict` clean.
 
-**Daily run (since 2026-10-28):** Windows Task Scheduler task `job-finder daily scan` runs `scripts/daily.cmd` at 08:00 (or as soon as possible after a missed start): `jobfinder scan`, then `jobfinder alerts --days 3`, then (since 2026-10-30) `jobfinder extract --all --extractor ollama`, then (since 2026-11-02) `jobfinder digest`. Output is appended to `data/logs/daily.log` (gitignored); the extraction's job list is in `data/logs/extract.log`, latest run only. Ollama starts at login, so if the run happens before login the extract step fails and the next run catches up: look for `extract 1` on the log's exit line. Check that log to verify closing / reopening across days.
+**Daily run (since 2026-10-28):** Windows Task Scheduler task `job-finder daily scan` runs `scripts/daily.cmd` (since 2026-11-03, set up by `scripts/register_task.ps1`) at logon, unlock and wake from sleep, and the script runs once a day: a fully successful run writes the date to `data/logs/last_run.txt`, and a run with a failed step is retried at the next start. Until 2026-11-03 it ran at 08:00, and on 2026-11-03 that start never happened (no run until 15:42). It runs: `jobfinder scan`, then `jobfinder alerts --days 3`, then (since 2026-10-30) `jobfinder extract --all --extractor ollama`, then (since 2026-11-02) `jobfinder digest`. Output is appended to `data/logs/daily.log` (gitignored); the extraction's job list is in `data/logs/extract.log`, latest run only. Ollama starts at login, so if the run happens before login the extract step fails and the next run catches up: look for `extract 1` on the log's exit line. Check that log to verify closing / reopening across days.
 
 ## Done
 - **Phase 0 — ATS mapping** (`tools/ats_probe.py`): 58 companies probed. 25 have a public API (21 Greenhouse, 4 Ashby) with 408 Israel jobs. Comeet (9 companies) deferred, ADR-002. 14 large companies have no public API (Workday or in-house).
@@ -54,6 +54,8 @@ Repo: https://github.com/alexfunking/the-job-finder-V2 (public), `main` tracks `
 - Archive the old repo `alexfunking/The_job_Finder`.
 
 ## Known gaps
+- The task's new triggers (unlock, wake) are set up but have not yet started a real run; the first will be on 2026-11-04. A manual `daily.cmd` run is not covered by the task's no-overlap rule: on 2026-11-03 one ran at the same moment as the task, harmlessly.
+- A step that fails every day (a board gone for good) makes every unlock start a full run again.
 - Button presses are read only by the daily run, so a press shows nothing until the next run, and Telegram drops presses after 24 hours. Running `jobfinder digest` more often would shorten that, but it would also send new jobs at that moment.
 - A job the user never answers is not shown again.
 - The Telegram token was pasted into a chat on 2026-11-02. If it was not revoked in BotFather afterwards, revoke it and update `.env`.

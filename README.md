@@ -23,15 +23,11 @@ Reads the LinkedIn job-alert emails in a dedicated mailbox over IMAP, read-only 
 Setup: copy `.env.example` to `.env` and set `ALERTS_EMAIL_ACCOUNT` and `ALERTS_EMAIL_APP_PASSWORD` (a Gmail app password, never the account password).
 
 ## Daily run
-`scripts/daily.cmd` runs `jobfinder scan`, then `jobfinder alerts --days 3`, then `jobfinder extract --all --extractor ollama` so the local model reads new postings (Ollama must be running; a job that fails is retried on the next run), then `jobfinder digest` to send what is new to Telegram. Output is appended to `data/logs/daily.log`, except the extraction's job-by-job list, which is in `data/logs/extract.log` for the latest run only. A Windows Task Scheduler task runs it every morning; to create one:
+`scripts/daily.cmd` runs `jobfinder scan`, then `jobfinder alerts --days 3`, then `jobfinder extract --all --extractor ollama` so the local model reads new postings (Ollama must be running; a job that fails is retried on the next run), then `jobfinder digest` to send what is new to Telegram. Output is appended to `data/logs/daily.log`, except the extraction's job-by-job list, which is in `data/logs/extract.log` for the latest run only. A Windows Task Scheduler task runs it the first time the computer is used each day; to create one:
 ```powershell
-$repo = (Get-Location).Path
-Register-ScheduledTask -TaskName 'job-finder daily scan' `
-  -Action (New-ScheduledTaskAction -Execute cmd.exe -Argument "/c `"$repo\scripts\daily.cmd`"" -WorkingDirectory $repo) `
-  -Trigger (New-ScheduledTaskTrigger -Daily -At 08:00) `
-  -Settings (New-ScheduledTaskSettingsSet -StartWhenAvailable -RunOnlyIfNetworkAvailable -ExecutionTimeLimit (New-TimeSpan -Minutes 30))
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\register_task.ps1
 ```
-`-StartWhenAvailable` runs a missed morning run as soon as the computer is back on.
+The task starts the script at logon, at unlock and on waking from sleep. A run where every step succeeds writes the date to `data/logs/last_run.txt`, and the script stops at once for the rest of that day; a run with a failed step is tried again at the next start. `scripts\daily.cmd force` runs it again by hand. A computer left on and unlocked overnight does not start a new run until the next lock or sleep.
 
 ## Label the eval set
 ```bash
